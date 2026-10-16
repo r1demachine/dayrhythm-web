@@ -227,6 +227,25 @@ export default function Home() {
         </div>
       </header>
 
+      <nav className="app-navigation" aria-label="Разделы DayRhythm">
+        {([
+          ["schedule", "День", "◷"],
+          ["calendar", "Календарь", "▦"],
+          ["timeline", "Лента времени", "↕"],
+          ["ai", "AI-план", "✦"],
+          ["insights", "Аналитика", "▥"],
+          ["inbox", "Входящие", "↓"],
+          ["settings", "Настройки", "⚙"]
+        ] as [AppView, string, string][]).map(([view, label, glyph]) => (
+          <button key={view} className={activeView === view ? "app-nav-item active" : "app-nav-item"} onClick={() => setActiveView(view)} aria-current={activeView === view ? "page" : undefined}>
+            <span>{glyph}</span>{label}
+            {view === "inbox" && tasks.filter(task => task.inbox).length > 0 && <i>{tasks.filter(task => task.inbox).length}</i>}
+          </button>
+        ))}
+      </nav>
+      {notice && <button className="notice" onClick={() => setNotice("")}>{notice} <span>×</span></button>}
+      {activeView === "schedule" ? (
+      <>
       <section className="welcome-row">
         <div><div className="eyebrow">ТВОЙ ДЕНЬ · ТВОЙ РИТМ</div><h1>Время — твой главный ресурс.</h1><p className="subtitle">Собери день в цельную картину. Планируй не список дел, а своё время.</p></div>
         <button className="primary-button new-task-top" onClick={() => openNew()}><span>＋</span> Новая задача</button>
@@ -242,8 +261,6 @@ export default function Home() {
         <div className="day-stats"><div><strong>{dayTasks.length}</strong><span>задач</span></div><i /><div><strong>{Math.floor(plannedMinutes / 60)}<small>ч</small> {plannedMinutes % 60}<small>м</small></strong><span>запланировано</span></div><i /><div><strong>{doneCount}/{dayTasks.length}</strong><span>выполнено</span></div></div>
       </section>
 
-      {notice && <button className="notice" onClick={() => setNotice("")}>{notice} <span>×</span></button>}
-
       <div className="workspace">
         <section className="dial-panel panel">
           <div className="panel-heading"><div><div className="eyebrow">24 ЧАСА · ОДИН ВЗГЛЯД</div><h2>Круг твоего дня</h2></div><span className="live-pill"><span /> {selectedDate === todayString() ? "СЕГОДНЯ" : "ПЛАН"}</span></div>
@@ -256,7 +273,7 @@ export default function Home() {
                 const b = polar(hour * 60, hour % 6 === 0 ? 158 : 162);
                 return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 6 === 0 ? "major-tick" : "minor-tick"} />{hour % 3 === 0 && <text x={polar(hour * 60, 145).x} y={polar(hour * 60, 145).y} className="hour-label">{pad(hour)}</text>}</g>;
               })}
-              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
+              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={task.colorHex || COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start, clockFormat)}`} />)}
               <circle cx="200" cy="200" r="88" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="178" className="center-overline">ТВОЁ ВРЕМЯ</text>
               <text x="200" y="216" className="center-time">{timeText(now)}</text>
@@ -275,7 +292,7 @@ export default function Home() {
           <div className="task-list">
             {shownTasks.length === 0 ? <div className="empty-state"><div className="empty-art"><span>＋</span></div><h3>{dayTasks.length ? "В этой категории пусто" : "День начинается с идеи"}</h3><p>{dayTasks.length ? "Выбери другую категорию или добавь задачу." : "Добавь первую задачу и собери свой ритм на сегодня."}</p><button className="primary-button" onClick={() => openNew()}>＋ Добавить задачу</button></div> : shownTasks.map(task => <article className={task.done ? "task-card completed" : "task-card"} key={task.id}>
               <button className={task.done ? "task-check checked" : "task-check"} onClick={() => toggleDone(task.id)} aria-label={task.done ? "Отменить выполнение" : "Отметить выполненной"}>{task.done ? "✓" : ""}</button>
-              <button className="task-main" onClick={() => openEdit(task)}><span className="task-time">{timeText(task.start)} <i /> {timeText(task.start + task.duration)}</span><strong>{task.title}</strong>{task.note && <span className="task-note">{task.note}</span>}<span className="task-meta"><i style={{ background: COLORS[task.category] }} />{task.category}<span>·</span>{task.duration >= 60 ? `${Math.floor(task.duration / 60)} ч${task.duration % 60 ? ` ${task.duration % 60} мин` : ""}` : `${task.duration} мин`}</span></button>
+              <button className="task-main" onClick={() => openEdit(task)}><span className="task-time">{timeText(task.start, clockFormat)} <i /> {timeText(task.start + task.duration, clockFormat)}</span><strong>{task.emoji || CATEGORY_EMOJI[task.category]} {task.title}</strong>{task.note && <span className="task-note">{task.note}</span>}<span className="task-meta"><i style={{ background: COLORS[task.category] }} />{task.category}<span>·</span>{task.duration >= 60 ? `${Math.floor(task.duration / 60)} ч${task.duration % 60 ? ` ${task.duration % 60} мин` : ""}` : `${task.duration} мин`}</span></button>
               <button className="more-button" onClick={() => openEdit(task)} aria-label="Изменить задачу">···</button>
             </article>)}
           </div>
@@ -285,6 +302,32 @@ export default function Home() {
       </div>
 
       <footer className="app-footer"><span>dayrhythm.ai <span className="footer-dot">·</span> Найди свой ритм.</span><span>Твои данные остаются у тебя <span className="privacy-mark">↗</span></span></footer>
+      </>
+      ) : (
+        <FeatureViews
+          view={activeView}
+          tasks={tasks}
+          setTasks={setTasks}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          clockFormat={clockFormat}
+          setClockFormat={setClockFormat}
+          dialMode={dialMode}
+          setDialMode={setDialMode}
+          theme={theme}
+          setTheme={setTheme}
+          notificationsEnabled={notificationsEnabled}
+          setNotificationsEnabled={setNotificationsEnabled}
+          deletedAt={deletedAt}
+          setDeletedAt={setDeletedAt}
+          onOpenDay={(date) => { setSelectedDate(date); setActiveView("schedule"); }}
+          onCreateTask={(date, inbox = false) => { if (date) setSelectedDate(date); openNew(undefined, inbox); setActiveView("schedule"); }}
+          onEditTask={(task) => { openEdit(task); setActiveView("schedule"); }}
+          onToggleDone={toggleDone}
+          onDeleteTask={deleteTask}
+          setNotice={setNotice}
+        />
+      )}
 
       {showForm && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) resetForm(); }}><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="form-title"><div className="modal-head"><div><div className="eyebrow">{editing ? "НАСТРОЙКА ПЛАНА" : "НОВАЯ ЗАПИСЬ"}</div><h2 id="form-title">{editing ? "Изменить задачу" : "Добавить задачу"}</h2></div><button className="icon-button" onClick={resetForm} aria-label="Закрыть">×</button></div>
         <form onSubmit={saveTask}><label className="field-label">Название задачи<input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="Например, тренировка на станке" maxLength={100} required /></label>
