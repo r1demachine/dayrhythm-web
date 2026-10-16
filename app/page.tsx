@@ -33,7 +33,11 @@ const todayString = () => {
 const makeId = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const polar = (minutes: number, radius: number, cx = 200, cy = 200) => {
   const angle = (minutes / 1440) * Math.PI * 2 - Math.PI / 2;
-  return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+  // Стабилизируем SVG-атрибуты: сервер и браузер могут чуть различаться в последних знаках Math.sin/cos.
+  return {
+    x: Number((cx + Math.cos(angle) * radius).toFixed(3)),
+    y: Number((cy + Math.sin(angle) * radius).toFixed(3))
+  };
 };
 const sectorPath = (start: number, duration: number, inner: number, outer: number) => {
   const a = polar(start, outer), b = polar(start + duration, outer);
