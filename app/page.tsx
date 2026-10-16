@@ -64,6 +64,7 @@ export default function Home() {
   const [filter, setFilter] = useState<"Все" | Category>("Все");
   const [now, setNow] = useState(0);
   const [notice, setNotice] = useState("");
+  const [dragPreview, setDragPreview] = useState<{ taskId: string; minute: number } | null>(null);
   const dialRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<string | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -133,20 +134,37 @@ export default function Home() {
   const moveTask = useCallback((id: string, minute: number) => {
     setTasks(old => old.map(t => t.id === id ? { ...t, start: Math.min(1435, Math.max(0, Math.round(minute / 15) * 15)), duration: Math.min(t.duration, 1440 - Math.min(1435, Math.max(0, Math.round(minute / 15) * 15))) } : t));
   }, []);
-  const onDialPointerUp = (event: PointerEvent<SVGSVGElement>) => {
-    if (!dragRef.current || !dialRef.current) return;
-    const origin = dragOriginRef.current;
-    const moved = origin ? Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 8 : false;
-    const taskId = dragRef.current;
-    dragRef.current = null;
-    dragOriginRef.current = null;
-    if (!moved) return;
-    suppressSectorClickRef.current = true;
+  const pointerMinute = (event: PointerEvent<SVGSVGElement>) => {
+    if (!dialRef.current) return 0;
     const rect = dialRef.current.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 400;
     const y = ((event.clientY - rect.top) / rect.height) * 400;
     const angle = (Math.atan2(y - 200, x - 200) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
-    moveTask(taskId, angle / (Math.PI * 2) * 1440);
+    return Math.min(1435, Math.max(0, Math.round((angle / (Math.PI * 2) * 1440) / 15) * 15));
+  };
+  const onDialPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    if (!dragRef.current || !dragOriginRef.current) return;
+    const origin = dragOriginRef.current;
+    if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 8) {
+      setDragPreview({ taskId: dragRef.current, minute: pointerMinute(event) });
+    }
+  };
+  const onDialPointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    const taskId = dragRef.current;
+    const origin = dragOriginRef.current;
+    const moved = origin ? Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 8 : false;
+    dragRef.current = null;
+    dragOriginRef.current = null;
+    if (taskId && moved) {
+      suppressSectorClickRef.current = true;
+      moveTask(taskId, pointerMinute(event));
+    }
+    setDragPreview(null);
+  };
+  const onDialPointerCancel = () => {
+    dragRef.current = null;
+    dragOriginRef.current = null;
+    setDragPreview(null);
   };
   const exportData = () => {
     const blob = new Blob([JSON.stringify({ version: 1, tasks }, null, 2)], { type: "application/json" });
@@ -222,7 +240,8 @@ export default function Home() {
         <section className="dial-panel panel">
           <div className="panel-heading"><div><div className="eyebrow">24 ЧАСА · ОДИН ВЗГЛЯД</div><h2>Круг твоего дня</h2></div><span className="live-pill"><span /> {selectedDate === todayString() ? "СЕГОДНЯ" : "ПЛАН"}</span></div>
           <div className="dial-wrap">
-            <svg ref={dialRef} className="dial" viewBox="0 0 400 400" role="img" aria-label="Круговой циферблат суток" onPointerUp={onDialPointerUp}>
+            {dragPreview && <div className="drag-time-preview">Новое время: <strong>{timeText(dragPreview.minute)}</strong></div>}
+            <svg ref={dialRef} className="dial" viewBox="0 0 400 400" role="img" aria-label="Круговой циферблат суток" onPointerMove={onDialPointerMove} onPointerUp={onDialPointerUp} onPointerCancel={onDialPointerCancel}>
               <defs><filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter></defs>
               <circle cx="200" cy="200" r="166" className="dial-track" />
               {Array.from({ length: 24 }, (_, hour) => {
@@ -230,7 +249,7 @@ export default function Home() {
                 const b = polar(hour * 60, hour % 6 === 0 ? 158 : 162);
                 return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 6 === 0 ? "major-tick" : "minor-tick"} />{hour % 3 === 0 && <text x={polar(hour * 60, 145).x} y={polar(hour * 60, 145).y} className="hour-label">{pad(hour)}</text>}</g>;
               })}
-              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
+              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
               <circle cx="200" cy="200" r="88" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="178" className="center-overline">ТВОЁ ВРЕМЯ</text>
               <text x="200" y="216" className="center-time">{timeText(now)}</text>
