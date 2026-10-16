@@ -5,7 +5,7 @@ import { ChangeEvent, Dispatch, SetStateAction, useEffect, useMemo, useState } f
 import {
   AppView, CATEGORIES, CATEGORY_EMOJI, COLORS, Category, ClockFormat, DialMode,
   ParsedTask, Task, addDaysToDate, buildIcs, dateText, makeId, normalizeCategory,
-  normalizeTask, parseIcs, parseScheduleLocally, pad, timeText, todayString
+  normalizeTask, parseIcs, parseScheduleLocally, pad, taskOccursOnDate, timeText, todayString
 } from "@/lib/dayrhythm";
 import {
   CloudSession, DeletedTaskMap, getSavedSession, getSupabaseConfig,
@@ -47,16 +47,24 @@ const VIEW_HEADINGS: Record<Exclude<AppView, "schedule">, { eyebrow: string; tit
 };
 
 function tasksOnDate(tasks: Task[], date: string) {
-  const day = new Date(date + "T12:00:00");
-  return tasks.filter(task => {
-    if (task.inbox || task.date > date) return false;
-    if (task.date === date) return true;
-    if (task.recurrence === "daily") return true;
-    if (task.recurrence === "weekly") {
-      return new Date(task.date + "T12:00:00").getDay() === day.getDay();
-    }
-    return false;
-  }).sort((a, b) => a.start - b.start);
+  return tasks
+    .filter(task => taskOccursOnDate(task, date))
+    .map(task => {
+      if (task.recurrence === "none") return task;
+      const completedDates = task.completedDates ?? (task.done ? [task.date] : []);
+      return { ...task, date, done: completedDates.includes(date) };
+    })
+    .sort((a, b) => a.start - b.start);
+}
+
+function tasksBetweenDates(tasks: Task[], startDate: string, endDate: string) {
+  const output: Task[] = [];
+  let date = startDate;
+  for (let offset = 0; offset < 370 && date <= endDate; offset++) {
+    output.push(...tasksOnDate(tasks, date));
+    date = addDaysToDate(date, 1);
+  }
+  return output.filter(task => !task.inbox);
 }
 
 function formatDayChip(date: string) {
@@ -324,7 +332,7 @@ function InsightsView(props: Props) {
 
   const startDate = range === "day" ? props.selectedDate : range === "week" ? addDaysToDate(props.selectedDate, -((new Date(props.selectedDate + "T12:00:00").getDay() + 6) % 7)) : props.selectedDate.slice(0, 7) + "-01";
   const endDate = range === "day" ? props.selectedDate : range === "week" ? addDaysToDate(startDate, 6) : `${props.selectedDate.slice(0, 7)}-${daysInMonth(props.selectedDate)}`;
-  const events = props.tasks.filter(task => !task.inbox && task.date >= startDate && task.date <= endDate);
+  const events = tasksBetweenDates(props.tasks, startDate, endDate);
   const dailyEvents = tasksOnDate(props.tasks, props.selectedDate);
   const totalMinutes = events.reduce((sum, task) => sum + task.duration, 0);
   const completed = events.filter(task => task.done).length;
