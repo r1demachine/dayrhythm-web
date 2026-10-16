@@ -476,14 +476,10 @@ function SettingsView(props: Props) {
   const [syncLoading, setSyncLoading] = useState(false);
   const [supabaseConfigured, setSupabaseConfigured] = useState(false);
   const storageSize = useMemo(() => {
-    if (typeof window === "undefined") return "—";
-    let total = 0;
-    for (let index = 0; index < localStorage.length; index++) {
-      const key = localStorage.key(index);
-      if (key) total += key.length + (localStorage.getItem(key)?.length ?? 0);
-    }
+    const serialized = JSON.stringify({ tasks: props.tasks, deletedAt: props.deletedAt });
+    const total = serialized.length * 2;
     return total > 1024 * 1024 ? `${(total / 1024 / 1024).toFixed(2)} МБ` : `${(total / 1024).toFixed(1)} КБ`;
-  }, [props.tasks]);
+  }, [props.tasks, props.deletedAt]);
   useEffect(() => {
     setNotificationsSupported(typeof window !== "undefined" && "Notification" in window);
     setSession(getSavedSession());
