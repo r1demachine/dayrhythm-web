@@ -138,3 +138,4 @@
 .next-day-task:hover path{opacity:.46!important}
 .task-arc-interactive:hover .task-arc-label{fill:#fff}
 .task-hover-tooltip{left:clamp(130px,50%,calc(100% - 130px))}
+.next-day-task:hover{opacity:.46!important}
