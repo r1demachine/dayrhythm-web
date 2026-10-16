@@ -310,10 +310,13 @@ function AIPlannerView(props: Props) {
 function InsightsView(props: Props) {
   const [range, setRange] = useState<"day" | "week" | "month">("week");
   const [aiInsights, setAiInsights] = useState<string[]>([]);
+  const [aiSummary, setAiSummary] = useState<{ summary: string; suggestions: string[] } | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [analyticsError, setAnalyticsError] = useState("");
   const [aiReady, setAiReady] = useState(false);
-  useEffect(() => { fetch("/api/ai").then(r => r.ok ? r.json() : null).then(value => setAiReady(Boolean(value?.groqConfigured || value?.geminiConfigured))).catch(() => undefined); }, []);
+  useEffect(() => { fetch("/api/ai").then(r => r.ok ? r.json() : null).then(value => setAiReady(Boolean(value?.groqConfigured))).catch(() => undefined); }, []);
 
   const startDate = range === "day" ? props.selectedDate : range === "week" ? addDaysToDate(props.selectedDate, -((new Date(props.selectedDate + "T12:00:00").getDay() + 6) % 7)) : props.selectedDate.slice(0, 7) + "-01";
   const endDate = range === "day" ? props.selectedDate : range === "week" ? addDaysToDate(startDate, 6) : `${props.selectedDate.slice(0, 7)}-${daysInMonth(props.selectedDate)}`;
@@ -370,10 +373,30 @@ function InsightsView(props: Props) {
     finally { setAiLoading(false); }
   };
 
+  const askAnalytics = async () => {
+    setAnalyticsLoading(true); setAnalyticsError(""); setAiSummary(null);
+    try {
+      const response = await fetch("/api/ai", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "analytics", model: "groq", startDate, endDate, tasks: events })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "AI-анализ периода недоступен.");
+      setAiSummary({
+        summary: String(payload.summary ?? ""),
+        suggestions: Array.isArray(payload.suggestions) ? payload.suggestions.map(String).slice(0, 6) : []
+      });
+      if (!payload.summary) throw new Error("AI не вернул вывод по периоду.");
+    } catch (err) { setAnalyticsError(err instanceof Error ? err.message : "Не удалось проанализировать период."); }
+    finally { setAnalyticsLoading(false); }
+  };
+
   return <div className="feature-page">
     <FeatureHeader view="insights" />
-    <div className="insights-range-row"><div className="segmented-control"><button className={range === "day" ? "active" : ""} onClick={() => setRange("day")}>День</button><button className={range === "week" ? "active" : ""} onClick={() => setRange("week")}>Неделя</button><button className={range === "month" ? "active" : ""} onClick={() => setRange("month")}>Месяц</button></div><span className="muted-text">{formatDayChip(startDate)} — {formatDayChip(endDate)}</span><button className="outline-button" onClick={askAI} disabled={aiLoading || !aiReady}>{aiLoading ? "Анализирую…" : "✦ AI-инсайты"}</button></div>
+    <div className="insights-range-row"><div className="segmented-control"><button className={range === "day" ? "active" : ""} onClick={() => setRange("day")}>День</button><button className={range === "week" ? "active" : ""} onClick={() => setRange("week")}>Неделя</button><button className={range === "month" ? "active" : ""} onClick={() => setRange("month")}>Месяц</button></div><span className="muted-text">{formatDayChip(startDate)} — {formatDayChip(endDate)}</span><button className="outline-button" onClick={askAI} disabled={aiLoading || !aiReady}>{aiLoading ? "Запрашиваю…" : "✦ AI-инсайты"}</button><button className="outline-button" onClick={askAnalytics} disabled={analyticsLoading || !aiReady}>{analyticsLoading ? "Анализирую…" : "AI-анализ периода"}</button></div>
     {aiError && <div className="feature-error">{aiError} Ниже показан локальный анализ по статистике задач.</div>}
+    {analyticsError && <div className="feature-error">{analyticsError}</div>}
+    {aiSummary && <section className="panel feature-panel ai-period-summary"><div className="panel-heading"><div><div className="eyebrow">AI-АНАЛИЗ ПЕРИОДА</div><h2>Итоги и рекомендации</h2></div><button className="icon-button" onClick={() => setAiSummary(null)} aria-label="Закрыть вывод AI">×</button></div><p>{aiSummary.summary}</p>{aiSummary.suggestions.length > 0 && <ul>{aiSummary.suggestions.map((item, index) => <li key={index}>{item}</li>)}</ul>}</section>}
     <div className="stats-grid">
       <StatCard label="Задачи" value={String(events.length)} detail={`${completed} выполнено`} />
       <StatCard label="Запланировано" value={`${Math.floor(totalMinutes / 60)}ч ${totalMinutes % 60}м`} detail="суммарная длительность" />
