@@ -363,9 +363,10 @@ export default function Home() {
                       const ghost = (segmentStart: number, segmentDuration: number, radius: number, suffix: string) => <path key={task.id + "-next-" + suffix} d={sectorPath(segmentStart % 720, segmentDuration, radius - 2, radius + 2)} fill="none" stroke={COLORS[task.category]} strokeWidth="7" strokeLinecap="round" opacity=".24" className="next-day-task" onMouseMove={event => updateTaskTooltip(event, task)} onMouseLeave={() => setTaskTooltip(null)} pointerEvents="stroke" />;
                       return [
                         morningDuration > 0 ? ghost(task.start, morningDuration, 75, "am") : null,
-                        afternoonDuration > 0 ? ghost(afternoonStart, afternoonDuration, 157, "pm") : null
+                        afternoonDuration > 0 ? ghost(afternoonStart, afternoonDuration, 154, "pm") : null
                       ];
                     })}
+                    {nextDayTasks.filter(task => task.start < 720 && task.start + task.duration > 720).map(task => <line key={task.id + "-next-noon-bridge"} x1={polar(720, 75).x} y1={polar(720, 75).y} x2={polar(720, 154).x} y2={polar(720, 154).y} stroke={COLORS[task.category]} strokeWidth="7" strokeLinecap="round" opacity=".24" className="next-day-task" onMouseMove={event => updateTaskTooltip(event, task)} onMouseLeave={() => setTaskTooltip(null)} />)}
                     {dayTasks.flatMap(task => {
                       const end = task.start + task.duration;
                       const upcoming = end > dialAnchor && task.start < dialAnchor + 720;
