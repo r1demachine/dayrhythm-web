@@ -291,7 +291,7 @@ export default function Home() {
                 const afternoonDuration = Math.max(0, end - afternoonStart);
                 return <>
                   {morningDuration > 0 && <path d={sectorPath(dragPreview.minute, morningDuration, 91, 115)} fill="none" stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
-                  {afternoonDuration > 0 && <path d={sectorPath(afternoonStart, afternoonDuration, 118, 142)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                  {afternoonDuration > 0 && <path d={sectorPath(afternoonStart, afternoonDuration, 118, 142)} fill="none" stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
                 </>;
               })()}
               <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
