@@ -1,36 +1,17 @@
 "use client";
 
 import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import FeatureViews from "./components/FeatureViews";
+import { CATEGORIES, CATEGORY_EMOJI, COLORS, actualMinuteForDialMinute, addDaysToDate, dateText, makeId, normalizeTask, pad, taskDialSegments, taskOccursOnDate, timeText, todayString } from "@/lib/dayrhythm";
+import type { AppView, Category, ClockFormat, DialMode, Recurrence, Task } from "@/lib/dayrhythm";
+import type { DeletedTaskMap } from "@/lib/supabase-rest";
 
-type Category = "Работа" | "Спорт" | "Отдых" | "Быт" | "Личное";
-type Task = {
-  id: string;
-  title: string;
-  date: string;
-  start: number;
-  duration: number;
-  category: Category;
-  done: boolean;
-  note: string;
-};
-const CATEGORIES: Category[] = ["Работа", "Спорт", "Отдых", "Быт", "Личное"];
-const COLORS: Record<Category, string> = {
-  "Работа": "#6266e9",
-  "Спорт": "#f36c45",
-  "Отдых": "#20a68a",
-  "Быт": "#d6a52d",
-  "Личное": "#bc75c9"
-};
 const STORAGE_KEY = "dayrhythm.tasks.v1";
 const THEME_KEY = "dayrhythm.theme.v1";
-const pad = (n: number) => String(n).padStart(2, "0");
-const timeText = (minutes: number) => `${pad(Math.floor(minutes / 60) % 24)}:${pad(minutes % 60)}`;
-const dateText = (date: string) => new Date(date + "T12:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
-const todayString = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-const makeId = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const CLOCK_FORMAT_KEY = "dayrhythm.clock-format.v1";
+const DIAL_MODE_KEY = "dayrhythm.dial-mode.v1";
+const NOTIFICATIONS_KEY = "dayrhythm.notifications.v1";
+const DELETED_KEY = "dayrhythm.deleted.v1";
 const polar = (minutes: number, radius: number, cx = 200, cy = 200) => {
   const angle = (minutes / 1440) * Math.PI * 2 - Math.PI / 2;
   // Стабилизируем SVG-атрибуты: сервер и браузер могут чуть различаться в последних знаках Math.sin/cos.
@@ -50,7 +31,12 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayString);
   const [ready, setReady] = useState(false);
+  const [activeView, setActiveView] = useState<AppView>("schedule");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [clockFormat, setClockFormat] = useState<ClockFormat>("24h");
+  const [dialMode, setDialMode] = useState<DialMode>("24h");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [deletedAt, setDeletedAt] = useState<DeletedTaskMap>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -58,6 +44,12 @@ export default function Home() {
   const [duration, setDuration] = useState("60");
   const [category, setCategory] = useState<Category>("Работа");
   const [note, setNote] = useState("");
+  const [emoji, setEmoji] = useState("💼");
+  const [colorHex, setColorHex] = useState(COLORS["Работа"]);
+  const [participants, setParticipants] = useState("");
+  const [reminderMinutes, setReminderMinutes] = useState("none");
+  const [recurrence, setRecurrence] = useState<Recurrence>("none");
+  const [isInboxTask, setIsInboxTask] = useState(false);
   const [filter, setFilter] = useState<"Все" | Category>("Все");
   const [now, setNow] = useState(0);
   const [notice, setNotice] = useState("");
@@ -69,19 +61,40 @@ export default function Home() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setTasks(JSON.parse(saved) as Task[]);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setTasks(parsed.map(value => normalizeTask(value)).filter((value): value is Task => Boolean(value)));
+        }
+      }
       const savedTheme = localStorage.getItem(THEME_KEY);
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
+      const savedClock = localStorage.getItem(CLOCK_FORMAT_KEY);
+      if (savedClock === "12h" || savedClock === "24h") setClockFormat(savedClock);
+      const savedDial = localStorage.getItem(DIAL_MODE_KEY);
+      if (savedDial === "24h" || savedDial === "day" || savedDial === "night" || savedDial === "auto") setDialMode(savedDial);
+      setNotificationsEnabled(localStorage.getItem(NOTIFICATIONS_KEY) === "true");
+      const savedDeleted = localStorage.getItem(DELETED_KEY);
+      if (savedDeleted) {
+        const value: unknown = JSON.parse(savedDeleted);
+        if (value && typeof value === "object" && !Array.isArray(value)) setDeletedAt(value as DeletedTaskMap);
+      }
     } catch { setNotice("Не удалось прочитать сохранённые данные браузера."); }
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready) localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  }, [tasks, ready]);
+    if (ready) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      localStorage.setItem(DELETED_KEY, JSON.stringify(deletedAt));
+      localStorage.setItem(THEME_KEY, theme);
+      localStorage.setItem(CLOCK_FORMAT_KEY, clockFormat);
+      localStorage.setItem(DIAL_MODE_KEY, dialMode);
+      localStorage.setItem(NOTIFICATIONS_KEY, String(notificationsEnabled));
+    }
+  }, [tasks, deletedAt, theme, clockFormat, dialMode, notificationsEnabled, ready]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    if (ready) localStorage.setItem(THEME_KEY, theme);
-  }, [theme, ready]);
+  }, [theme]);
   useEffect(() => {
     const update = () => {
       const d = new Date();
@@ -92,25 +105,44 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate).sort((a, b) => a.start - b.start), [tasks, selectedDate]);
+  const dayTasks = useMemo(() => tasks.filter(t => taskOccursOnDate(t, selectedDate)).sort((a, b) => a.start - b.start), [tasks, selectedDate]);
   const shownTasks = dayTasks.filter(t => filter === "Все" || t.category === filter);
   const doneCount = dayTasks.filter(t => t.done).length;
   const plannedMinutes = dayTasks.reduce((sum, t) => sum + t.duration, 0);
   const freeMinutes = Math.max(0, 1440 - plannedMinutes);
-  const activeTask = dayTasks.find(t => now >= t.start && now < t.start + t.duration);
+  const activeTask = dayTasks.find(t => !t.inbox && now >= t.start && now < t.start + t.duration);
+  const effectiveDialMode: Exclude<DialMode, "auto"> = dialMode === "auto" ? (now >= 360 && now < 1080 ? "day" : "night") : dialMode;
+  const dialHours = effectiveDialMode === "24h"
+    ? Array.from({ length: 24 }, (_, hour) => hour)
+    : effectiveDialMode === "day"
+      ? Array.from({ length: 13 }, (_, index) => 6 + index)
+      : [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6];
+  const nowDialMinute = effectiveDialMode === "24h"
+    ? now
+    : effectiveDialMode === "day"
+      ? (now >= 360 && now <= 1080 ? (now - 360) * 2 : null)
+      : (now >= 1080 || now < 360 ? (now >= 1080 ? now - 1080 : now + 360) * 2 : null);
   const changeDate = (delta: number) => {
     const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + delta);
     setSelectedDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
   };
   const resetForm = () => {
-    setEditing(null); setTitle(""); setStart("09:00"); setDuration("60"); setCategory("Работа"); setNote(""); setShowForm(false);
+    setEditing(null); setTitle(""); setStart("09:00"); setDuration("60"); setCategory("Работа"); setNote("");
+    setEmoji(CATEGORY_EMOJI["Работа"]); setColorHex(COLORS["Работа"]); setParticipants(""); setReminderMinutes("none");
+    setRecurrence("none"); setIsInboxTask(false); setShowForm(false);
   };
-  const openNew = (minute?: number) => {
-    setEditing(null); setTitle(""); setStart(timeText(minute ?? 540)); setDuration("60"); setCategory("Работа"); setNote(""); setShowForm(true);
+  const openNew = (minute?: number, inbox = false) => {
+    setEditing(null); setTitle(""); setStart(timeText(minute ?? 540)); setDuration("60"); setCategory("Работа"); setNote("");
+    setEmoji(CATEGORY_EMOJI["Работа"]); setColorHex(COLORS["Работа"]); setParticipants(""); setReminderMinutes("none");
+    setRecurrence("none"); setIsInboxTask(inbox); setShowForm(true);
   };
   const openEdit = (task: Task) => {
-    setEditing(task.id); setTitle(task.title); setStart(timeText(task.start)); setDuration(String(task.duration)); setCategory(task.category); setNote(task.note); setShowForm(true);
+    setEditing(task.id); setTitle(task.title); setStart(timeText(task.start)); setDuration(String(task.duration));
+    setCategory(task.category); setNote(task.note); setEmoji(task.emoji || CATEGORY_EMOJI[task.category]);
+    setColorHex(task.colorHex || COLORS[task.category]); setParticipants((task.participants || []).join(", "));
+    setReminderMinutes(task.reminderMinutes == null ? "none" : String(task.reminderMinutes));
+    setRecurrence(task.recurrence || "none"); setIsInboxTask(Boolean(task.inbox)); setShowForm(true);
   };
   const saveTask = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -118,17 +150,33 @@ export default function Home() {
     const startMinutes = h * 60 + m;
     const length = Math.min(1440 - startMinutes, Math.max(5, Number(duration) || 60));
     if (!title.trim()) return;
+    const updatedAt = Date.now();
+    const taskFields = {
+      title: title.trim(), date: selectedDate, start: startMinutes, duration: length, category,
+      note: note.trim(), emoji: emoji.trim() || CATEGORY_EMOJI[category], colorHex,
+      participants: participants.split(",").map(value => value.trim()).filter(Boolean).slice(0, 30),
+      reminderMinutes: reminderMinutes === "none" ? null : Number(reminderMinutes),
+      recurrence, inbox: isInboxTask, updatedAt
+    };
     if (editing) {
-      setTasks(old => old.map(t => t.id === editing ? { ...t, title: title.trim(), date: selectedDate, start: startMinutes, duration: length, category, note: note.trim() } : t));
+      setTasks(old => old.map(t => t.id === editing ? { ...t, ...taskFields } : t));
+      setDeletedAt(old => { const next = { ...old }; delete next[editing]; return next; });
     } else {
-      setTasks(old => [...old, { id: makeId(), title: title.trim(), date: selectedDate, start: startMinutes, duration: length, category, done: false, note: note.trim() }]);
+      setTasks(old => [...old, { id: makeId(), ...taskFields, done: false, source: "manual" }]);
     }
     resetForm();
   };
-  const toggleDone = (id: string) => setTasks(old => old.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const deleteTask = (id: string) => setTasks(old => old.filter(t => t.id !== id));
+  const toggleDone = (id: string) => setTasks(old => old.map(t => t.id === id ? { ...t, done: !t.done, updatedAt: Date.now() } : t));
+  const deleteTask = (id: string) => {
+    setDeletedAt(old => ({ ...old, [id]: Date.now() }));
+    setTasks(old => old.filter(t => t.id !== id));
+  };
   const moveTask = useCallback((id: string, minute: number) => {
-    setTasks(old => old.map(t => t.id === id ? { ...t, start: Math.min(1435, Math.max(0, Math.round(minute / 15) * 15)), duration: Math.min(t.duration, 1440 - Math.min(1435, Math.max(0, Math.round(minute / 15) * 15))) } : t));
+    setTasks(old => old.map(t => {
+      if (t.id !== id) return t;
+      const startMinute = Math.min(1435, Math.max(0, Math.round(minute / 15) * 15));
+      return { ...t, start: startMinute, duration: Math.min(t.duration, 1440 - startMinute), updatedAt: Date.now() };
+    }));
   }, []);
   const onDialPointerUp = (event: PointerEvent<SVGSVGElement>) => {
     if (!dragRef.current || !dialRef.current) return;
@@ -143,10 +191,10 @@ export default function Home() {
     const x = ((event.clientX - rect.left) / rect.width) * 400;
     const y = ((event.clientY - rect.top) / rect.height) * 400;
     const angle = (Math.atan2(y - 200, x - 200) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
-    moveTask(taskId, angle / (Math.PI * 2) * 1440);
+    moveTask(taskId, actualMinuteForDialMinute(angle / (Math.PI * 2) * 1440, effectiveDialMode));
   };
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, tasks }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 2, tasks, deletedAt }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a"); link.href = url; link.download = `dayrhythm-backup-${selectedDate}.json`; link.click();
     URL.revokeObjectURL(url); setNotice("Резервная копия скачана.");
@@ -158,7 +206,10 @@ export default function Home() {
       try {
         const parsed = JSON.parse(String(reader.result));
         if (!Array.isArray(parsed.tasks)) throw new Error("invalid");
-        setTasks(parsed.tasks); setNotice("Резервная копия импортирована.");
+        const imported = parsed.tasks.map((value: unknown) => normalizeTask(value)).filter((value: Task | null): value is Task => Boolean(value));
+        setTasks(imported);
+        if (parsed.deletedAt && typeof parsed.deletedAt === "object" && !Array.isArray(parsed.deletedAt)) setDeletedAt(parsed.deletedAt as DeletedTaskMap);
+        setNotice(`Резервная копия импортирована: ${imported.length} задач.`);
       } catch { setNotice("Не удалось импортировать файл. Выберите резервную копию DayRhythm JSON."); }
     };
     reader.readAsText(file);
