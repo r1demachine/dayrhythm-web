@@ -90,7 +90,7 @@ const taskArcLabel = (task: Task, visibleDuration: number, radius: number, perio
   const compactRange = `${pad(Math.floor(task.start / 60))}–${pad(endMinute === 1440 ? 24 : Math.floor(endMinute / 60) % 24)}`;
   const fullLabel = `${task.title} · ${timeRange}`;
   if (maxChars >= fullLabel.length) return fullLabel;
-  if (maxChars >= compactRange.length + 6) {
+  if (maxChars >= compactRange.length + 5) {
     const titleChars = maxChars - compactRange.length - 3;
     const shortTitle = task.title.length > titleChars ? `${task.title.slice(0, titleChars - 1)}…` : task.title;
     return `${shortTitle} · ${compactRange}`;
@@ -161,7 +161,6 @@ export default function Home() {
   const doneCount = dayTasks.filter(t => t.done).length;
   const plannedMinutes = dayTasks.reduce((sum, t) => sum + t.duration, 0);
   const freeMinutes = Math.max(0, 1440 - plannedMinutes);
-  const activeTask = dayTasks.find(t => now >= t.start && now < t.start + t.duration);
   const changeDate = (delta: number) => {
     const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + delta);
@@ -469,7 +468,7 @@ export default function Home() {
           <div className="task-list">
             {shownTasks.length === 0 ? <div className="empty-state"><div className="empty-art"><span>＋</span></div><h3>{dayTasks.length ? "В этой категории пусто" : "День начинается с идеи"}</h3><p>{dayTasks.length ? "Выбери другую категорию или добавь задачу." : "Добавь первую задачу и собери свой ритм на сегодня."}</p><button className="primary-button" onClick={() => openNew()}>＋ Добавить задачу</button></div> : shownTasks.map(task => <article className={task.done ? "task-card completed" : "task-card"} key={task.id}>
               <button className={task.done ? "task-check checked" : "task-check"} onClick={() => toggleDone(task.id)} aria-label={task.done ? "Отменить выполнение" : "Отметить выполненной"}>{task.done ? "✓" : ""}</button>
-              <button className="task-main" onClick={() => openEdit(task)}><span className="task-time">{timeText(task.start)} <i /> {timeText(task.start + task.duration)}</span><strong>{task.title}</strong>{task.note && <span className="task-note">{task.note}</span>}<span className="task-meta"><i style={{ background: COLORS[task.category] }} />{task.category}<span>·</span>{task.duration >= 60 ? `${Math.floor(task.duration / 60)} ч${task.duration % 60 ? ` ${task.duration % 60} мин` : ""}` : `${task.duration} мин`}</span></button>
+              <button className="task-main" onClick={() => openEdit(task)}><span className="task-time">{timeText(task.start)} <i /> {endTimeText(task.start + task.duration)}</span><strong>{task.title}</strong>{task.note && <span className="task-note">{task.note}</span>}<span className="task-meta"><i style={{ background: COLORS[task.category] }} />{task.category}<span>·</span>{task.duration >= 60 ? `${Math.floor(task.duration / 60)} ч${task.duration % 60 ? ` ${task.duration % 60} мин` : ""}` : `${task.duration} мин`}</span></button>
               <button className="more-button" onClick={() => openEdit(task)} aria-label="Изменить задачу">···</button>
             </article>)}
           </div>
