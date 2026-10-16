@@ -161,10 +161,27 @@ export default function Home() {
       try {
         const parsed = JSON.parse(String(reader.result));
         if (!Array.isArray(parsed.tasks)) throw new Error("invalid");
+        const valid = parsed.tasks.every((task: Task) => task && typeof task.id === "string" && typeof task.title === "string" && typeof task.start === "number" && typeof task.duration === "number" && (task.date === "" || /^\\d{4}-\\d{2}-\\d{2}$/.test(task.date)));
+        if (!valid) throw new Error("invalid task schema");
         setTasks(parsed.tasks); setNotice("Резервная копия импортирована.");
       } catch { setNotice("Не удалось импортировать файл. Выберите резервную копию DayRhythm JSON."); }
     };
     reader.readAsText(file);
+  };
+  const addInboxTask = (taskTitle: string, taskNote: string) => {
+    setTasks(old => [...old, { id: makeId(), title: taskTitle, date: "", start: 540, duration: 60, category: "Личное", done: false, note: taskNote }]);
+    setNotice("Задача добавлена во входящие.");
+  };
+  const scheduleInboxTask = (id: string) => {
+    setTasks(old => old.map(task => task.id === id ? { ...task, date: selectedDate, start: 540 } : task));
+    setNotice("Задача добавлена в расписание на 09:00. Проверь время на циферблате.");
+  };
+  const addParsedTask = (task: ParsedWebTask) => {
+    const categoryValue = CATEGORIES.includes(task.category as Category) ? task.category as Category : "Личное";
+    const startMinutes = Math.max(0, Math.min(1439, Math.round(task.startTime * 60)));
+    const endMinutes = Math.max(startMinutes + 5, Math.min(1440, Math.round(task.endTime * 60)));
+    setTasks(old => [...old, { id: makeId(), title: task.title.trim(), date: task.date, start: startMinutes, duration: Math.min(1440 - startMinutes, endMinutes - startMinutes), category: categoryValue, done: false, note: task.description || "" }]);
+    setNotice("Добавлена задача «" + task.title + "».");
   };
 
   return (
