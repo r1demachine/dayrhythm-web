@@ -98,3 +98,39 @@
 /* У SVG-задач не должно быть прямоугольной рамки фокуса браузера. */
 .task-sector:focus,.task-sector:focus-visible{outline:none}
 .task-sector{-webkit-tap-highlight-color:transparent}
+
+/* Выбор режима циферблата */
+.dial-mode-switch{display:flex;gap:5px;flex-wrap:wrap;margin:18px 0 4px;padding:4px;border:1px solid var(--line);border-radius:13px;background:var(--panel-soft)}
+.dial-mode-option{flex:1;min-width:92px;border:1px solid transparent;border-radius:9px;padding:9px 10px;background:transparent;color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap}
+.dial-mode-option:hover{color:var(--text)}
+.dial-mode-option.active{background:var(--panel);border-color:var(--line);box-shadow:var(--shadow);color:var(--text)}
+.dial-wrap{position:relative}
+.dial-24-track,.dial-nextday-track{fill:none;stroke:var(--line);stroke-width:1.2}
+.dial-nextday-track{stroke-dasharray:3 5;opacity:.75}
+.task-arc-interactive{cursor:grab;outline:none;touch-action:none}
+.task-arc-interactive:active{cursor:grabbing}
+.task-arc-interactive:focus,.task-arc-interactive:focus-visible{outline:none}
+.task-arc-label{font-size:8px;fill:#fff;font-weight:800;letter-spacing:.05px;paint-order:stroke;stroke:rgba(20,20,20,.36);stroke-width:.75px;stroke-linejoin:round;pointer-events:none;text-anchor:middle}
+.future-arc-label{opacity:.28}
+.task-noon-bridge{cursor:grab;touch-action:none}
+.next-day-task{cursor:help}
+.next-day-task:hover{opacity:.46}
+.task-hover-tooltip{position:absolute;z-index:10;width:min(270px,calc(100% - 20px));padding:12px 14px;display:grid;gap:6px;border:1px solid var(--line);border-radius:13px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.18);transform:translate(-50%,-100%);pointer-events:none;animation:appear .12s ease-out}
+.task-hover-tooltip>strong{font-family:Manrope,sans-serif;font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.task-hover-time{font-variant-numeric:tabular-nums;font-weight:800;font-size:12px}
+.task-hover-date{font-size:10px;color:var(--muted)}
+.task-hover-tooltip p{font-size:11px;line-height:1.45;color:var(--muted);white-space:normal;overflow-wrap:anywhere}
+.dial-wrap-list{width:100%;max-width:100%;margin:16px 0 0}
+.day-hours-list{display:grid;max-height:660px;overflow-y:auto;padding-right:3px;border-top:1px solid var(--line);scrollbar-width:thin}
+.day-hour-row{display:grid;grid-template-columns:58px minmax(0,1fr);gap:10px;min-height:38px;border-bottom:1px solid var(--line);padding:5px 0}
+.day-hour-row.has-tasks{background:color-mix(in srgb,var(--panel-soft) 42%,transparent)}
+.day-hour-label{padding-top:8px;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;font-weight:700}
+.day-hour-content{display:grid;gap:5px;min-width:0}
+.day-hour-free{padding:8px 10px;color:var(--muted);font-size:10px;opacity:.58}
+.day-hour-task{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:5px 9px;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:9px;background:var(--panel);text-align:left}
+.day-hour-task:hover{background:var(--panel-soft)}
+.day-hour-task-time{font-size:10px;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)}
+.day-hour-task strong{min-width:0;font-size:11px;overflow-wrap:anywhere}
+.day-hour-task-note{grid-column:2 / 4;font-size:10px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
+.day-hour-task-category{font-size:9px;color:var(--muted);white-space:nowrap}
+@media(max-width:760px){.dial-mode-switch{margin-top:15px}.dial-mode-option{padding:9px 7px;font-size:10px;min-width:0}.day-hours-list{max-height:72vh}.task-hover-tooltip{width:min(250px,calc(100% - 12px))}.day-hour-row{grid-template-columns:46px minmax(0,1fr);gap:6px}.day-hour-task{grid-template-columns:1fr auto}.day-hour-task-time{grid-column:1}.day-hour-task strong{grid-column:1}.day-hour-task-category{grid-column:2;grid-row:1 / span 2}.day-hour-task-note{grid-column:1 / 3}}
