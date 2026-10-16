@@ -64,6 +64,10 @@ export default function Home() {
   const suppressSectorClickRef = useRef(false);
   const autoSyncInFlightRef = useRef(false);
   const lastSyncedSignatureRef = useRef("");
+  const latestTasksRef = useRef<Task[]>(tasks);
+  const latestDeletedAtRef = useRef<DeletedTaskMap>(deletedAt);
+  latestTasksRef.current = tasks;
+  latestDeletedAtRef.current = deletedAt;
 
   useEffect(() => {
     try {
@@ -114,9 +118,46 @@ export default function Home() {
       try {
         const result = await syncTasksWithCloud(session, tasks, deletedAt);
         saveSession(result.session);
-        lastSyncedSignatureRef.current = JSON.stringify({ tasks: result.tasks, deletedAt: result.deletedAt });
-        if (JSON.stringify(tasks) !== JSON.stringify(result.tasks)) setTasks(result.tasks);
-        if (JSON.stringify(deletedAt) !== JSON.stringify(result.deletedAt)) setDeletedAt(result.deletedAt);
+        const latestTasks = latestTasksRef.current;
+        const latestDeletedAt = latestDeletedAtRef.current;
+        const changedDuringRequest =
+          JSON.stringify(latestTasks) !== JSON.stringify(tasks) ||
+          JSON.stringify(latestDeletedAt) !== JSON.stringify(deletedAt);
+
+        if (!changedDuringRequest) {
+          lastSyncedSignatureRef.current = JSON.stringify({ tasks: result.tasks, deletedAt: result.deletedAt });
+          if (JSON.stringify(tasks) !== JSON.stringify(result.tasks)) setTasks(result.tasks);
+          if (JSON.stringify(deletedAt) !== JSON.stringify(result.deletedAt)) setDeletedAt(result.deletedAt);
+        } else {
+          // Keep local edits/deletes made while the network request was running.
+          const mergedDeletedAt: DeletedTaskMap = { ...result.deletedAt };
+          for (const [id, deletedTime] of Object.entries(latestDeletedAt)) {
+            mergedDeletedAt[id] = Math.max(mergedDeletedAt[id] ?? 0, deletedTime);
+          }
+          const remoteById = new Map(result.tasks.map(task => [task.id, task]));
+          const mergedTasks = new Map<string, Task>();
+          for (const remoteTask of result.tasks) {
+            const localTask = latestTasks.find(task => task.id === remoteTask.id);
+            const useLocal = localTask && (localTask.updatedAt ?? 0) > (remoteTask.updatedAt ?? 0);
+            const candidate = useLocal ? localTask : remoteTask;
+            if ((candidate.updatedAt ?? 0) > (mergedDeletedAt[candidate.id] ?? 0)) {
+              mergedTasks.set(candidate.id, candidate);
+            }
+          }
+          for (const localTask of latestTasks) {
+            if (remoteById.has(localTask.id)) continue;
+            if ((localTask.updatedAt ?? 0) > (mergedDeletedAt[localTask.id] ?? 0)) {
+              mergedTasks.set(localTask.id, localTask);
+            }
+          }
+          for (const task of mergedTasks.values()) {
+            if ((task.updatedAt ?? 0) > (mergedDeletedAt[task.id] ?? 0)) delete mergedDeletedAt[task.id];
+          }
+          setTasks(Array.from(mergedTasks.values()));
+          setDeletedAt(mergedDeletedAt);
+          // Schedule another sync for edits that were made during the request.
+          lastSyncedSignatureRef.current = "";
+        }
       } catch {
         // Keep local edits; retry on the next data/auth change or from Settings.
         lastSyncedSignatureRef.current = signature;
