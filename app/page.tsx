@@ -60,6 +60,8 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const dialRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<string | null>(null);
+  const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressSectorClickRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -127,12 +129,18 @@ export default function Home() {
   }, []);
   const onDialPointerUp = (event: PointerEvent<SVGSVGElement>) => {
     if (!dragRef.current || !dialRef.current) return;
+    const origin = dragOriginRef.current;
+    const moved = origin ? Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 8 : false;
+    const taskId = dragRef.current;
+    dragRef.current = null;
+    dragOriginRef.current = null;
+    if (!moved) return;
+    suppressSectorClickRef.current = true;
     const rect = dialRef.current.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 400;
     const y = ((event.clientY - rect.top) / rect.height) * 400;
     const angle = (Math.atan2(y - 200, x - 200) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
-    moveTask(dragRef.current, angle / (Math.PI * 2) * 1440);
-    dragRef.current = null;
+    moveTask(taskId, angle / (Math.PI * 2) * 1440);
   };
   const exportData = () => {
     const blob = new Blob([JSON.stringify({ version: 1, tasks }, null, 2)], { type: "application/json" });
@@ -194,7 +202,7 @@ export default function Home() {
                 const b = polar(hour * 60, hour % 6 === 0 ? 158 : 162);
                 return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 6 === 0 ? "major-tick" : "minor-tick"} />{hour % 3 === 0 && <text x={polar(hour * 60, 145).x} y={polar(hour * 60, 145).y} className="hour-label">{pad(hour)}</text>}</g>;
               })}
-              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={() => { dragRef.current = task.id; }} onClick={() => openEdit(task)} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
+              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
               <circle cx="200" cy="200" r="88" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="178" className="center-overline">ТВОЁ ВРЕМЯ</text>
               <text x="200" y="216" className="center-time">{timeText(now)}</text>
