@@ -46,6 +46,9 @@ export default function Home() {
   const [duration, setDuration] = useState("60");
   const [category, setCategory] = useState<Category>("Работа");
   const [note, setNote] = useState("");
+  const [taskInsight, setTaskInsight] = useState<{ insight: string; suggestions: string[] } | null>(null);
+  const [taskInsightLoading, setTaskInsightLoading] = useState(false);
+  const [taskInsightError, setTaskInsightError] = useState("");
   const [emoji, setEmoji] = useState("💼");
   const [colorHex, setColorHex] = useState(COLORS["Работа"]);
   const [participants, setParticipants] = useState("");
@@ -180,19 +183,19 @@ export default function Home() {
   const resetForm = () => {
     setEditing(null); setTitle(""); setStart("09:00"); setDuration("60"); setCategory("Работа"); setNote("");
     setEmoji(CATEGORY_EMOJI["Работа"]); setColorHex(COLORS["Работа"]); setParticipants(""); setReminderMinutes("none");
-    setRecurrence("none"); setIsInboxTask(false); setShowForm(false);
+    setRecurrence("none"); setIsInboxTask(false); setTaskInsight(null); setTaskInsightError(""); setShowForm(false);
   };
   const openNew = (minute?: number, inbox = false) => {
     setEditing(null); setTitle(""); setStart(timeText(minute ?? 540)); setDuration("60"); setCategory("Работа"); setNote("");
     setEmoji(CATEGORY_EMOJI["Работа"]); setColorHex(COLORS["Работа"]); setParticipants(""); setReminderMinutes("none");
-    setRecurrence("none"); setIsInboxTask(inbox); setShowForm(true);
+    setRecurrence("none"); setIsInboxTask(inbox); setTaskInsight(null); setTaskInsightError(""); setShowForm(true);
   };
   const openEdit = (task: Task) => {
     setEditing(task.id); setTitle(task.title); setStart(timeText(task.start)); setDuration(String(task.duration));
     setCategory(task.category); setNote(task.note); setEmoji(task.emoji || CATEGORY_EMOJI[task.category]);
     setColorHex(task.colorHex || COLORS[task.category]); setParticipants((task.participants || []).join(", "));
     setReminderMinutes(task.reminderMinutes == null ? "none" : String(task.reminderMinutes));
-    setRecurrence(task.recurrence || "none"); setIsInboxTask(Boolean(task.inbox)); setShowForm(true);
+    setRecurrence(task.recurrence || "none"); setIsInboxTask(Boolean(task.inbox)); setTaskInsight(null); setTaskInsightError(""); setShowForm(true);
   };
   const saveTask = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -216,6 +219,43 @@ export default function Home() {
     }
     resetForm();
   };
+  const requestTaskInsight = async () => {
+    if (!title.trim()) return;
+    const [hour, minute] = start.split(":").map(Number);
+    setTaskInsightLoading(true);
+    setTaskInsightError("");
+    try {
+      const response = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "task-insight",
+          model: "groq",
+          task: {
+            title: title.trim(),
+            description: note.trim(),
+            startTime: hour * 60 + minute,
+            endTime: hour * 60 + minute + Number(duration),
+            duration: Number(duration),
+            category,
+            participants: participants.split(",").map(value => value.trim()).filter(Boolean)
+          }
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Совет AI недоступен.");
+      setTaskInsight({
+        insight: String(payload.insight ?? ""),
+        suggestions: Array.isArray(payload.suggestions) ? payload.suggestions.map(String).slice(0, 4) : []
+      });
+      if (!payload.insight) throw new Error("AI не вернул рекомендацию.");
+    } catch (error) {
+      setTaskInsightError(error instanceof Error ? error.message : "Не удалось получить совет AI.");
+    } finally {
+      setTaskInsightLoading(false);
+    }
+  };
+
   const toggleDone = (id: string) => setTasks(old => old.map(t => t.id === id ? { ...t, done: !t.done, updatedAt: Date.now() } : t));
   const deleteTask = (id: string) => {
     setDeletedAt(old => ({ ...old, [id]: Date.now() }));
@@ -393,6 +433,7 @@ export default function Home() {
           <div className="field-grid"><label className="field-label">Напоминание<select value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)}><option value="none">Без напоминания</option><option value="0">В момент начала</option><option value="5">За 5 минут</option><option value="10">За 10 минут</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option><option value="60">За час</option></select></label><label className="field-label">Повтор<select value={recurrence} onChange={e => setRecurrence(e.target.value as Recurrence)}><option value="none">Не повторять</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option></select></label></div>
           <label className="inbox-check"><input type="checkbox" checked={isInboxTask} onChange={e => setIsInboxTask(e.target.checked)} /> <span><strong>Входящая задача</strong><small>Сохранять без закрепления в расписании и на циферблате.</small></span></label>
           <label className="field-label">Заметка <span className="optional-label">необязательно</span><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Что важно не забыть?" rows={2} maxLength={300} /></label>
+          <div className="task-ai-advice"><button type="button" className="outline-button" onClick={requestTaskInsight} disabled={taskInsightLoading || !title.trim()}>{taskInsightLoading ? "Готовлю совет…" : "✦ Получить совет AI"}</button>{taskInsightError && <p className="feature-error">{taskInsightError}</p>}{taskInsight && <div className="feature-status"><strong>{taskInsight.insight}</strong>{taskInsight.suggestions.length > 0 && <ul>{taskInsight.suggestions.map((item, index) => <li key={index}>{item}</li>)}</ul>}</div>}</div>
           <div className="modal-actions">{editing && <button type="button" className="delete-button" onClick={() => { deleteTask(editing); resetForm(); }}>Удалить</button>}<button type="button" className="outline-button" onClick={resetForm}>Отмена</button><button className="primary-button" type="submit">{editing ? "Сохранить" : "Добавить задачу"}</button></div>
         </form></section></div>}
       <div className="sr-only" aria-live="polite">{notice}</div>
