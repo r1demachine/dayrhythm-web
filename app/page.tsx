@@ -107,6 +107,11 @@ export default function Home() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
   useEffect(() => {
+    const retryCloudSync = () => setCloudAuthRevision(value => value + 1);
+    window.addEventListener("online", retryCloudSync);
+    return () => window.removeEventListener("online", retryCloudSync);
+  }, []);
+  useEffect(() => {
     if (!ready) return;
     const signature = JSON.stringify({ tasks, deletedAt });
     if (signature === lastSyncedSignatureRef.current || autoSyncInFlightRef.current) return;
@@ -161,7 +166,7 @@ export default function Home() {
         }
       } catch {
         // Keep local edits; retry on the next data/auth change or from Settings.
-        lastSyncedSignatureRef.current = signature;
+        lastSyncedSignatureRef.current = "";
         setNotice("Не удалось синхронизировать данные с облаком. Проверь подключение в настройках.");
       } finally {
         autoSyncInFlightRef.current = false;
@@ -265,7 +270,8 @@ export default function Home() {
       note: note.trim(), emoji: emoji.trim() || CATEGORY_EMOJI[category], colorHex,
       participants: participants.split(",").map(value => value.trim()).filter(Boolean).slice(0, 30),
       reminderMinutes: reminderMinutes === "none" ? null : Number(reminderMinutes),
-      recurrence, inbox: isInboxTask, updatedAt
+      recurrence, completedDates: originalTask?.recurrence === recurrence ? originalTask.completedDates : undefined,
+      inbox: isInboxTask, updatedAt
     };
     if (editing) {
       setTasks(old => old.map(t => t.id === editing ? { ...t, ...taskFields } : t));
