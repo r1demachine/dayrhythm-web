@@ -254,8 +254,8 @@ export default function Home() {
             <svg ref={dialRef} className="dial" viewBox="0 0 400 400" role="img" aria-label="Круговой циферблат суток" onPointerMove={onDialPointerMove} onPointerUp={onDialPointerUp} onPointerCancel={onDialPointerCancel}>
               <defs><filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter></defs>
               <circle cx="200" cy="200" r="166" className="dial-track" />
-              <circle cx="200" cy="200" r="105" className="dial-morning-track" />
-              <circle cx="200" cy="200" r="135" className="dial-afternoon-track" />
+              <circle cx="200" cy="200" r="103" className="dial-morning-track" />
+              <circle cx="200" cy="200" r="130" className="dial-afternoon-track" />
               {Array.from({ length: 12 }, (_, hour) => {
                 const minute = hour * 60;
                 const hourLabel = hour === 0 ? "12" : pad(hour);
@@ -268,8 +268,8 @@ export default function Home() {
                 const upcoming = end > dialAnchor && task.start < dialAnchor + 720;
                 const renderSegment = (segmentStart: number, segmentDuration: number, morning: boolean, suffix: string) => {
                   const offset = segmentStart % 720;
-                  const inner = morning ? 91 : 121;
-                  const outer = morning ? 119 : 149;
+                  const inner = morning ? 91 : 118;
+                  const outer = morning ? 115 : 142;
                   return <path key={`${task.id}-${suffix}`} d={sectorPath(offset, segmentDuration, inner, outer)} fill="none" stroke={COLORS[task.category]} strokeWidth={outer - inner} strokeLinecap="round" opacity={task.done ? .25 : upcoming ? .92 : .48} className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />;
                 };
                 const morningDuration = task.start < 720 ? Math.min(task.duration, 720 - task.start) : 0;
@@ -288,8 +288,8 @@ export default function Home() {
                 const afternoonStart = Math.max(dragPreview.minute, 720);
                 const afternoonDuration = Math.max(0, end - afternoonStart);
                 return <>
-                  {morningDuration > 0 && <path d={sectorPath(dragPreview.minute, morningDuration, 91, 119)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
-                  {afternoonDuration > 0 && <path d={sectorPath(afternoonStart, afternoonDuration, 121, 149)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                  {morningDuration > 0 && <path d={sectorPath(dragPreview.minute, morningDuration, 91, 115)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                  {afternoonDuration > 0 && <path d={sectorPath(afternoonStart, afternoonDuration, 118, 142)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
                 </>;
               })()}
               <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
