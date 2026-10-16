@@ -83,8 +83,8 @@
 @media(max-width:620px){.feature-nav{margin:0 -2px}.feature-nav-item{padding:9px 11px;font-size:12px}.feature-page{padding-top:22px}.feature-heading{align-items:flex-start;flex-direction:column}.feature-heading input[type=date]{width:100%}.timeline-summary>div{min-width:0;flex:1;padding:0 10px}.timeline-summary strong{font-size:17px}.timeline-summary span{font-size:10px}.timeline-ruler{grid-template-columns:repeat(13,minmax(0,1fr))}.timeline-hour:nth-child(even){display:none}.timeline-event{grid-template-columns:1fr auto;gap:8px}.timeline-event-title{grid-column:1}.timeline-event-meta{grid-column:1}.timeline-event .small-action{grid-column:2;grid-row:1 / span 3}.inbox-item{align-items:flex-start;flex-wrap:wrap}.inbox-item-main{flex-basis:calc(100% - 50px)}.inbox-item>.small-action{margin-left:36px}.insight-stat-grid{gap:8px}.insight-stat{padding:14px}.insight-stat strong{font-size:23px}.insight-card{padding:16px}.hourly-chart{gap:2px}.settings-grid{grid-template-columns:1fr}.insight-summary{padding:18px}.insight-ring{width:68px;height:68px;flex-basis:68px}}
 
 /* 12-hour focus dial and live drag feedback */
-.dial-window-track{fill:none;stroke:var(--line);stroke-width:1.2;opacity:.9}
-.dial-overflow-track{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:3 5;opacity:.8}
+.dial-morning-track{fill:none;stroke:var(--line);stroke-width:1.2;opacity:.9}
+.dial-afternoon-track{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:3 5;opacity:.8}
 .task-sector{stroke-linejoin:round;transition:opacity .15s,filter .15s}
 .task-sector.upcoming-sector{filter:drop-shadow(0 2px 3px rgba(0,0,0,.08))}
 .task-sector.overflow-sector{filter:saturate(.78)}
