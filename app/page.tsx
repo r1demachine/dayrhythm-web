@@ -249,6 +249,7 @@ export default function Home() {
               <circle cx="200" cy="200" r="166" className="dial-track" />
               {Array.from({ length: 12 }, (_, hour) => {
                 const minute = hour * 60;
+                const hourLabel = hour === 0 ? "12" : pad(hour);
                 const a = polar(minute, hour % 3 === 0 ? 174 : 169);
                 const b = polar(minute, hour % 3 === 0 ? 158 : 163);
                 return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 3 === 0 ? "major-tick" : "minor-tick"} /><text x={polar(minute, 145).x} y={polar(minute, 145).y} className="hour-label">{hourLabel}</text></g>;
