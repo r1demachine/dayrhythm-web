@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChangeEvent, Dispatch, SetStateAction, useEffect, useMemo, useState } from "react";
 import {
   AppView, CATEGORIES, CATEGORY_EMOJI, COLORS, Category, ClockFormat, DialMode,
@@ -292,7 +293,7 @@ function AIPlannerView(props: Props) {
           <div><strong>Фото расписания или заметок</strong><p>До 3 изображений, до 4 МБ каждое. Для фото используется Gemini.</p></div>
           <label className="outline-button">＋ Добавить фото<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" multiple onChange={handleImages} hidden disabled={images.length >= 3} /></label>
         </div>
-        {images.length > 0 && <div className="ai-image-list">{images.map((image, index) => <div className="ai-image-thumb" key={image}><img src={image} alt={imageNames[index] ?? `Изображение ${index + 1}`} /><span>{imageNames[index]}</span><button onClick={() => { setImages(old => old.filter((_, i) => i !== index)); setImageNames(old => old.filter((_, i) => i !== index)); }} aria-label="Удалить изображение">×</button></div>)}</div>}
+        {images.length > 0 && <div className="ai-image-list">{images.map((image, index) => <div className="ai-image-thumb" key={image}><Image src={image} alt={imageNames[index] ?? `Изображение ${index + 1}`} width={38} height={38} unoptimized /><span>{imageNames[index]}</span><button onClick={() => { setImages(old => old.filter((_, i) => i !== index)); setImageNames(old => old.filter((_, i) => i !== index)); }} aria-label="Удалить изображение">×</button></div>)}</div>}
         {error && <div className="feature-error" role="alert">{error}</div>}
         {status && <div className="feature-status">{status}</div>}
         <button className="primary-button ai-parse-button" onClick={parse} disabled={loading || (!prompt.trim() && !images.length)}>{loading ? "Разбираю расписание…" : "✦ Разобрать расписание"}</button>
@@ -471,7 +472,7 @@ function SettingsView(props: Props) {
       if (key) total += key.length + (localStorage.getItem(key)?.length ?? 0);
     }
     return total > 1024 * 1024 ? `${(total / 1024 / 1024).toFixed(2)} МБ` : `${(total / 1024).toFixed(1)} КБ`;
-  }, [props.tasks.length]);
+  }, [props.tasks]);
   useEffect(() => {
     setNotificationsSupported(typeof window !== "undefined" && "Notification" in window);
     setSession(getSavedSession());
