@@ -138,8 +138,9 @@ export default function Home() {
           const mergedTasks = new Map<string, Task>();
           for (const remoteTask of result.tasks) {
             const localTask = latestTasks.find(task => task.id === remoteTask.id);
-            const useLocal = localTask && (localTask.updatedAt ?? 0) > (remoteTask.updatedAt ?? 0);
-            const candidate = useLocal ? localTask : remoteTask;
+            const candidate: Task = localTask && (localTask.updatedAt ?? 0) > (remoteTask.updatedAt ?? 0)
+              ? localTask
+              : remoteTask;
             if ((candidate.updatedAt ?? 0) > (mergedDeletedAt[candidate.id] ?? 0)) {
               mergedTasks.set(candidate.id, candidate);
             }
