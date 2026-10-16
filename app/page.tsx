@@ -2,7 +2,7 @@
 
 import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FeatureViews from "./components/FeatureViews";
-import { CATEGORIES, CATEGORY_EMOJI, COLORS, actualMinuteForDialMinute, addDaysToDate, dateText, makeId, normalizeTask, pad, taskDialSegments, taskOccursOnDate, timeText, todayString } from "@/lib/dayrhythm";
+import { CATEGORIES, CATEGORY_EMOJI, COLORS, actualMinuteForDialMinute, dateText, makeId, normalizeTask, pad, taskDialSegments, taskOccursOnDate, timeText, todayString } from "@/lib/dayrhythm";
 import type { AppView, Category, ClockFormat, DialMode, Recurrence, Task } from "@/lib/dayrhythm";
 import { getSavedSession, saveSession, syncTasksWithCloud } from "@/lib/supabase-rest";
 import type { DeletedTaskMap } from "@/lib/supabase-rest";
