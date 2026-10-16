@@ -309,58 +309,149 @@ export default function Home() {
 
       <div className="workspace">
         <section className="dial-panel panel">
-          <div className="panel-heading"><div><div className="eyebrow">12 ЧАСОВ В ФОКУСЕ · ВСЕ ДЕЛА ВИДНЫ</div><h2>Круг твоего дня</h2></div><span className="live-pill"><span /> {selectedDate === todayString() ? "СЕГОДНЯ" : "ПЛАН"}</span></div>
-          <div className="dial-wrap">
-            {dragPreview && <div className="drag-time-preview">Новое время: <strong>{timeText(dragPreview.minute)}</strong></div>}
-            <svg ref={dialRef} className="dial" viewBox="0 0 400 400" role="img" aria-label="Круговой циферблат суток" onPointerMove={onDialPointerMove} onPointerUp={onDialPointerUp} onPointerCancel={onDialPointerCancel}>
-              <defs><filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter></defs>
-              <circle cx="200" cy="200" r="166" className="dial-track" />
-              <circle cx="200" cy="200" r="103" className="dial-morning-track" />
-              <circle cx="200" cy="200" r="130" className="dial-afternoon-track" />
-              {Array.from({ length: 12 }, (_, hour) => {
-                const minute = hour * 60;
-                const hourLabel = hour === 0 ? "12" : pad(hour);
-                const a = polar(minute, hour % 3 === 0 ? 174 : 169);
-                const b = polar(minute, hour % 3 === 0 ? 158 : 163);
-                return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 3 === 0 ? "major-tick" : "minor-tick"} /><text x={polar(minute, 145).x} y={polar(minute, 145).y} className="hour-label">{hourLabel}</text></g>;
-              })}
-              {dayTasks.flatMap(task => {
-                const end = task.start + task.duration;
-                const upcoming = end > dialAnchor && task.start < dialAnchor + 720;
-                const renderSegment = (segmentStart: number, segmentDuration: number, morning: boolean, suffix: string) => {
-                  const offset = segmentStart % 720;
-                  const inner = morning ? 91 : 118;
-                  const outer = morning ? 115 : 142;
-                  return <path key={`${task.id}-${suffix}`} d={sectorPath(offset, segmentDuration, inner, outer)} fill="none" stroke={COLORS[task.category]} strokeWidth={outer - inner} strokeLinecap="round" opacity={task.done ? .25 : upcoming ? .92 : .48} className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />;
-                };
-                const morningDuration = task.start < 720 ? Math.min(task.duration, 720 - task.start) : 0;
-                const afternoonStart = Math.max(task.start, 720);
-                const afternoonDuration = Math.max(0, end - afternoonStart);
-                return [
-                  morningDuration > 0 ? renderSegment(task.start, morningDuration, true, "am") : null,
-                  afternoonDuration > 0 ? renderSegment(afternoonStart, afternoonDuration, false, "pm") : null
-                ];
-              })}
-              {dragPreview && (() => {
-                const task = dayTasks.find(item => item.id === dragPreview.taskId);
-                if (!task) return null;
-                const end = dragPreview.minute + task.duration;
-                const morningDuration = dragPreview.minute < 720 ? Math.min(task.duration, 720 - dragPreview.minute) : 0;
-                const afternoonStart = Math.max(dragPreview.minute, 720);
-                const afternoonDuration = Math.max(0, end - afternoonStart);
-                return <>
-                  {morningDuration > 0 && <path d={sectorPath(dragPreview.minute, morningDuration, 91, 115)} fill="none" stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
-                  {afternoonDuration > 0 && <path d={sectorPath(afternoonStart, afternoonDuration, 118, 142)} fill="none" stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
-                </>;
-              })()}
-              <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
-              <text x="200" y="183" className="center-overline">{selectedDate === todayString() ? "СЕЙЧАС" : "НАЧАЛО ОКНА"}</text>
-              <text x="200" y="215" className="center-time">{timeText(dialAnchor)}</text>
-              <text x="200" y="234" className="center-caption">ближайшие 12 часов</text>
-              {selectedDate === todayString() && <g><line x1={polar(dialAnchor % 720, 55).x} y1={polar(dialAnchor % 720, 55).y} x2={polar(dialAnchor % 720, 174).x} y2={polar(dialAnchor % 720, 174).y} className="now-line" /><circle cx={polar(dialAnchor % 720, 174).x} cy={polar(dialAnchor % 720, 174).y} r="5" className="now-dot" /></g>}
-            </svg>
+          <div className="panel-heading"><div><div className="eyebrow">{dialMode === "focus12" ? "12 ЧАСОВ · УТРО И ВЕЧЕР" : dialMode === "circle24" ? "24 ЧАСА · ПОЛНЫЙ КРУГ" : "24 ЧАСА · СПИСОК ПО ЧАСАМ"}</div><h2>{dialMode === "list24" ? "Расписание на сутки" : "Круг твоего дня"}</h2></div><span className="live-pill"><span /> {selectedDate === todayString() ? "СЕГОДНЯ" : "ПЛАН"}</span></div>
+          <div className="dial-mode-switch" role="group" aria-label="Способ отображения расписания">
+            <button className={dialMode === "focus12" ? "dial-mode-option active" : "dial-mode-option"} onClick={() => { setDialMode("focus12"); setTaskTooltip(null); }}>12 часов</button>
+            <button className={dialMode === "circle24" ? "dial-mode-option active" : "dial-mode-option"} onClick={() => { setDialMode("circle24"); setTaskTooltip(null); }}>Круг 24 ч</button>
+            <button className={dialMode === "list24" ? "dial-mode-option active" : "dial-mode-option"} onClick={() => { setDialMode("list24"); setTaskTooltip(null); }}>Список 24 ч</button>
           </div>
-          <div className="dial-hint"><span className="hint-icon">↻</span> Внутреннее кольцо — дела с 00:00 до 12:00, внешнее — с 12:00 до 24:00. Так одинаковое время утра и вечера не накладывается друг на друга. Яркость показывает ближайшие 12 часов. Перетаскивай сектор, чтобы изменить время.</div>
+          <div className={dialMode === "list24" ? "dial-wrap dial-wrap-list" : "dial-wrap"} ref={dialWrapRef}>
+            {dragPreview && dialMode !== "list24" && <div className="drag-time-preview">Новое время: <strong>{timeText(dragPreview.minute)}</strong></div>}
+            {dialMode === "list24" ? (
+              <div className="day-hours-list" aria-label="Список расписания с 00:00 до 24:00">
+                {Array.from({ length: 24 }, (_, hour) => {
+                  const hourTasks = dayTasks.filter(task => Math.floor(task.start / 60) === hour);
+                  return <div className={hourTasks.length ? "day-hour-row has-tasks" : "day-hour-row"} key={hour}>
+                    <div className="day-hour-label">{pad(hour)}:00</div>
+                    <div className="day-hour-content">
+                      {hourTasks.length ? hourTasks.map(task => <button className="day-hour-task" key={task.id} onClick={() => openEdit(task)} style={{ borderLeftColor: COLORS[task.category] }}>
+                        <span className="day-hour-task-time">{timeText(task.start)}–{endTimeText(task.start + task.duration)}</span>
+                        <strong>{task.title}</strong>
+                        {task.note && <span className="day-hour-task-note">{task.note}</span>}
+                        <span className="day-hour-task-category">{task.category}</span>
+                      </button>) : <span className="day-hour-free">Свободно</span>}
+                    </div>
+                  </div>;
+                })}
+              </div>
+            ) : (
+              <svg ref={dialRef} className={dialMode === "circle24" ? "dial dial-24" : "dial"} viewBox="0 0 400 400" role="img" aria-label={dialMode === "circle24" ? "Круговой циферблат всех 24 часов" : "Два кольца: утренние и вечерние задачи"} onPointerMove={onDialPointerMove} onPointerUp={onDialPointerUp} onPointerCancel={onDialPointerCancel}>
+                <defs><filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter></defs>
+                <circle cx="200" cy="200" r="166" className="dial-track" />
+                {dialMode === "focus12" ? (
+                  <>
+                    <circle cx="200" cy="200" r="103" className="dial-morning-track" />
+                    <circle cx="200" cy="200" r="130" className="dial-afternoon-track" />
+                    {Array.from({ length: 12 }, (_, hour) => {
+                      const minute = hour * 60;
+                      const hourLabel = hour === 0 ? "12" : pad(hour);
+                      const a = polar(minute, hour % 3 === 0 ? 174 : 169);
+                      const b = polar(minute, hour % 3 === 0 ? 158 : 163);
+                      return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 3 === 0 ? "major-tick" : "minor-tick"} /><text x={polar(minute, 145).x} y={polar(minute, 145).y} className="hour-label">{hourLabel}</text></g>;
+                    })}
+                    {nextDayTasks.flatMap(task => {
+                      const end = task.start + task.duration;
+                      const morningDuration = task.start < 720 ? Math.min(task.duration, 720 - task.start) : 0;
+                      const afternoonStart = Math.max(task.start, 720);
+                      const afternoonDuration = Math.max(0, end - afternoonStart);
+                      const ghost = (segmentStart: number, segmentDuration: number, radius: number, suffix: string) => <path key={task.id + "-next-" + suffix} d={sectorPath(segmentStart % 720, segmentDuration, radius - 2, radius + 2)} fill="none" stroke={COLORS[task.category]} strokeWidth="7" strokeLinecap="round" opacity=".24" className="next-day-task" onMouseMove={event => updateTaskTooltip(event, task)} onMouseLeave={() => setTaskTooltip(null)} pointerEvents="stroke" />;
+                      return [
+                        morningDuration > 0 ? ghost(task.start, morningDuration, 75, "am") : null,
+                        afternoonDuration > 0 ? ghost(afternoonStart, afternoonDuration, 157, "pm") : null
+                      ];
+                    })}
+                    {dayTasks.flatMap(task => {
+                      const end = task.start + task.duration;
+                      const upcoming = end > dialAnchor && task.start < dialAnchor + 720;
+                      const renderSegment = (segmentStart: number, segmentDuration: number, morning: boolean, suffix: string) => {
+                        const offset = segmentStart % 720;
+                        const inner = morning ? 91 : 118;
+                        const outer = morning ? 115 : 142;
+                        const radius = (inner + outer) / 2;
+                        const pathId = "task-arc-" + task.id + "-" + suffix;
+                        const label = taskArcLabel(task, segmentDuration, radius, 720);
+                        return <g key={task.id + "-" + suffix} className="task-arc-interactive" onMouseMove={event => updateTaskTooltip(event, task)} onMouseLeave={() => setTaskTooltip(null)} onPointerDown={event => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={task.title + ", " + timeText(task.start) + "–" + endTimeText(task.start + task.duration)}>
+                          <path id={pathId} d={sectorPath(offset, segmentDuration, inner, outer)} fill="none" stroke={COLORS[task.category]} strokeWidth={outer - inner} strokeLinecap="round" opacity={task.done ? .25 : upcoming ? .92 : .48} className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} />
+                          {label && <text className="task-arc-label"><textPath href={"#" + pathId} startOffset="50%" textAnchor="middle">{label}</textPath></text>}
+                        </g>;
+                      };
+                      const morningDuration = task.start < 720 ? Math.min(task.duration, 720 - task.start) : 0;
+                      const afternoonStart = Math.max(task.start, 720);
+                      const afternoonDuration = Math.max(0, end - afternoonStart);
+                      return [
+                        morningDuration > 0 ? renderSegment(task.start, morningDuration, true, "am") : null,
+                        afternoonDuration > 0 ? renderSegment(afternoonStart, afternoonDuration, false, "pm") : null
+                      ];
+                    })}
+                    {dayTasks.filter(task => task.start < 720 && task.start + task.duration > 720).map(task => <line key={task.id + "-noon-bridge"} x1={polar(720, 103).x} y1={polar(720, 103).y} x2={polar(720, 130).x} y2={polar(720, 130).y} stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity={task.done ? .25 : .92} className="task-noon-bridge" onMouseMove={event => updateTaskTooltip(event, task)} onMouseLeave={() => setTaskTooltip(null)} onPointerDown={event => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} />)}
+                    {dragPreview && (() => {
+                      const task = dayTasks.find(item => item.id === dragPreview.taskId);
+                      if (!task) return null;
+                      const end = dragPreview.minute + task.duration;
+                      const morningDuration = dragPreview.minute < 720 ? Math.min(task.duration, 720 - dragPreview.minute) : 0;
+                      const afternoonStart = Math.max(dragPreview.minute, 720);
+                      const afternoonDuration = Math.max(0, end - afternoonStart);
+                      return <>
+                        {morningDuration > 0 && <path d={sectorPath(dragPreview.minute, morningDuration, 91, 115)} fill="none" stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                        {afternoonDuration > 0 && <path d={sectorPath(afternoonStart, afternoonDuration, 118, 142)} fill="none" stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                        {morningDuration > 0 && afternoonDuration > 0 && <line x1={polar(720, 103).x} y1={polar(720, 103).y} x2={polar(720, 130).x} y2={polar(720, 130).y} stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                      </>;
+                    })()}
+                    <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
+                    <text x="200" y="183" className="center-overline">{selectedDate === todayString() ? "СЕЙЧАС" : "НАЧАЛО ДНЯ"}</text>
+                    <text x="200" y="215" className="center-time">{timeText(dialAnchor)}</text>
+                    <text x="200" y="234" className="center-caption">00:00–12:00 / 12:00–24:00</text>
+                    {selectedDate === todayString() && <g><line x1={polar(dialAnchor % 720, 55).x} y1={polar(dialAnchor % 720, 55).y} x2={polar(dialAnchor % 720, 174).x} y2={polar(dialAnchor % 720, 174).y} className="now-line" /><circle cx={polar(dialAnchor % 720, 174).x} cy={polar(dialAnchor % 720, 174).y} r="5" className="now-dot" /></g>}
+                  </>
+                ) : (
+                  <>
+                    <circle cx="200" cy="200" r="120" className="dial-24-track" />
+                    <circle cx="200" cy="200" r="154" className="dial-nextday-track" />
+                    {Array.from({ length: 24 }, (_, hour) => {
+                      const minute = hour * 60;
+                      const a = polar24(minute, hour % 6 === 0 ? 174 : 169);
+                      const b = polar24(minute, hour % 6 === 0 ? 158 : 163);
+                      return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 6 === 0 ? "major-tick" : "minor-tick"} />{hour % 2 === 0 && <text x={polar24(minute, 143).x} y={polar24(minute, 143).y} className="hour-label">{pad(hour)}</text>}</g>;
+                    })}
+                    {nextDayTasks.map(task => {
+                      const radius = 154;
+                      const label = taskArcLabel(task, task.duration, radius, 1440);
+                      const pathId = "next24-arc-" + task.id;
+                      return <g key={pathId} className="next-day-task" onMouseMove={event => updateTaskTooltip(event, task)} onMouseLeave={() => setTaskTooltip(null)}>
+                        <path id={pathId} d={sectorPath24(task.start, task.duration, 151, 157)} fill="none" stroke={COLORS[task.category]} strokeWidth="6" strokeLinecap="round" opacity=".23" />
+                        {label && <text className="task-arc-label future-arc-label"><textPath href={"#" + pathId} startOffset="50%" textAnchor="middle">{label}</textPath></text>}
+                      </g>;
+                    })}
+                    {dayTasks.map(task => {
+                      const radius = 120;
+                      const pathId = "task-24-arc-" + task.id;
+                      const label = taskArcLabel(task, task.duration, radius, 1440);
+                      const upcoming = task.start + task.duration > dialAnchor && task.start < dialAnchor + 720;
+                      return <g key={pathId} className="task-arc-interactive" onMouseMove={event => updateTaskTooltip(event, task)} onMouseLeave={() => setTaskTooltip(null)} onPointerDown={event => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={task.title + ", " + timeText(task.start) + "–" + endTimeText(task.start + task.duration)}>
+                        <path id={pathId} d={sectorPath24(task.start, task.duration, 108, 132)} fill="none" stroke={COLORS[task.category]} strokeWidth="24" strokeLinecap="round" opacity={task.done ? .25 : upcoming ? .92 : .48} className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} />
+                        {label && <text className="task-arc-label"><textPath href={"#" + pathId} startOffset="50%" textAnchor="middle">{label}</textPath></text>}
+                      </g>;
+                    })}
+                    <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
+                    <text x="200" y="183" className="center-overline">{selectedDate === todayString() ? "СЕЙЧАС" : "24 ЧАСА"}</text>
+                    <text x="200" y="215" className="center-time">{selectedDate === todayString() ? timeText(now) : "24 ч"}</text>
+                    <text x="200" y="234" className="center-caption">00:00–24:00</text>
+                    {selectedDate === todayString() && <g><line x1={polar24(now, 55).x} y1={polar24(now, 55).y} x2={polar24(now, 174).x} y2={polar24(now, 174).y} className="now-line" /><circle cx={polar24(now, 174).x} cy={polar24(now, 174).y} r="5" className="now-dot" /></g>}
+                  </>
+                )}
+              </svg>
+            )}
+            {taskTooltip && [...dayTasks, ...nextDayTasks].some(task => task.id === taskTooltip.taskId) && (() => {
+              const task = [...dayTasks, ...nextDayTasks].find(item => item.id === taskTooltip.taskId);
+              return task ? <div className="task-hover-tooltip" style={{ left: taskTooltip.x, top: taskTooltip.y }}>
+                <strong>{task.title}</strong>
+                <span className="task-hover-time">{timeText(task.start)}–{endTimeText(task.start + task.duration)}</span>
+                <span className="task-hover-date">{task.date === selectedDate ? "Выбранный день" : "Следующий день"} · {task.category}</span>
+                <p>{task.note || "Описание не добавлено."}</p>
+              </div> : null;
+            })()}
+          </div>
+          <div className="dial-hint"><span className="hint-icon">↻</span> {dialMode === "focus12" ? "Внутреннее кольцо — 00:00–12:00, внешнее — 12:00–24:00. Задачи следующего дня показаны тонкими полупрозрачными дугами." : dialMode === "circle24" ? "Полный круг показывает 24 часа. При наведении видны название, время и описание задачи." : "Список содержит все 24 часа выбранного дня. Нажми на задачу, чтобы изменить её."}</div>
           <div className="legend"><span><i className="legend-dot" style={{ background: COLORS["Работа"] }} />Работа</span><span><i className="legend-dot" style={{ background: COLORS["Спорт"] }} />Спорт</span><span><i className="legend-dot" style={{ background: COLORS["Отдых"] }} />Отдых</span><span><i className="legend-dot" style={{ background: COLORS["Быт"] }} />Быт</span><span><i className="legend-dot" style={{ background: COLORS["Личное"] }} />Личное</span></div>
           <div className="day-balance"><div className="balance-head"><span>Баланс дня</span><strong>{Math.round(plannedMinutes / 1440 * 100)}% <small>распланировано</small></strong></div><div className="balance-bar"><span style={{ width: `${Math.min(100, plannedMinutes / 1440 * 100)}%` }} /></div><div className="balance-foot"><span><i className="balance-dot planned" />{Math.floor(plannedMinutes / 60)} ч занято</span><span><i className="balance-dot free" />{Math.floor(freeMinutes / 60)} ч свободно</span></div></div>
         </section>
