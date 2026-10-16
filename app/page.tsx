@@ -104,6 +104,27 @@ export default function Home() {
     const timer = window.setInterval(update, 30000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!ready || !notificationsEnabled || typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return;
+    const currentDate = todayString();
+    const firedKey = "dayrhythm.fired-reminders.v1";
+    let fired: Record<string, number> = {};
+    try { fired = JSON.parse(localStorage.getItem(firedKey) || "{}") as Record<string, number>; } catch { fired = {}; }
+    for (const task of tasks) {
+      if (task.inbox || task.reminderMinutes == null || !taskOccursOnDate(task, currentDate)) continue;
+      const reminderAt = task.start - task.reminderMinutes;
+      if (reminderAt < 0 || now < reminderAt || now >= reminderAt + 1) continue;
+      const id = `${currentDate}:${task.id}:${task.reminderMinutes}`;
+      if (fired[id]) continue;
+      try {
+        new Notification(`${task.emoji || CATEGORY_EMOJI[task.category]} ${task.title}`, {
+          body: task.reminderMinutes === 0 ? `Начинается сейчас · ${timeText(task.start, clockFormat)}` : `Начнётся через ${task.reminderMinutes} мин · ${timeText(task.start, clockFormat)}`
+        });
+        fired[id] = Date.now();
+      } catch { /* Notification permission can change while the app is open. */ }
+    }
+    localStorage.setItem(firedKey, JSON.stringify(fired));
+  }, [tasks, now, notificationsEnabled, ready, clockFormat]);
 
   const dayTasks = useMemo(() => tasks.filter(t => taskOccursOnDate(t, selectedDate)).sort((a, b) => a.start - b.start), [tasks, selectedDate]);
   const shownTasks = dayTasks.filter(t => filter === "Все" || t.category === filter);
@@ -285,7 +306,7 @@ export default function Home() {
               {selectedDate === todayString() && nowDialMinute !== null && <g><line x1={polar(nowDialMinute, 84).x} y1={polar(nowDialMinute, 84).y} x2={polar(nowDialMinute, 174).x} y2={polar(nowDialMinute, 174).y} className="now-line" /><circle cx={polar(nowDialMinute, 174).x} cy={polar(nowDialMinute, 174).y} r="5" className="now-dot" /></g>}
             </svg>
           </div>
-          <div className="dial-hint"><span className="hint-icon">↻</span> Нажми на сектор задачи, чтобы изменить её. Перетащи сектор по кругу, чтобы сдвинуть время.</div>
+          <div className="dial-hint"><span className="hint-icon">↻</span> Нажми на сектор, чтобы изменить задачу. Перетаскивай сектор для переноса по времени; режим циферблата можно сменить в настройках.</div>
           <div className="legend"><span><i className="legend-dot" style={{ background: COLORS["Работа"] }} />Работа</span><span><i className="legend-dot" style={{ background: COLORS["Спорт"] }} />Спорт</span><span><i className="legend-dot" style={{ background: COLORS["Отдых"] }} />Отдых</span><span><i className="legend-dot" style={{ background: COLORS["Быт"] }} />Быт</span><span><i className="legend-dot" style={{ background: COLORS["Личное"] }} />Личное</span></div>
           <div className="day-balance"><div className="balance-head"><span>Баланс дня</span><strong>{Math.round(plannedMinutes / 1440 * 100)}% <small>распланировано</small></strong></div><div className="balance-bar"><span style={{ width: `${Math.min(100, plannedMinutes / 1440 * 100)}%` }} /></div><div className="balance-foot"><span><i className="balance-dot planned" />{Math.floor(plannedMinutes / 60)} ч занято</span><span><i className="balance-dot free" />{Math.floor(freeMinutes / 60)} ч свободно</span></div></div>
         </section>
