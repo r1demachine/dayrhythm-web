@@ -254,8 +254,8 @@ export default function Home() {
             <svg ref={dialRef} className="dial" viewBox="0 0 400 400" role="img" aria-label="Круговой циферблат суток" onPointerMove={onDialPointerMove} onPointerUp={onDialPointerUp} onPointerCancel={onDialPointerCancel}>
               <defs><filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter></defs>
               <circle cx="200" cy="200" r="166" className="dial-track" />
-              <circle cx="200" cy="200" r="125" className="dial-window-track" />
-              <circle cx="200" cy="200" r="80" className="dial-overflow-track" />
+              <circle cx="200" cy="200" r="105" className="dial-morning-track" />
+              <circle cx="200" cy="200" r="135" className="dial-afternoon-track" />
               {Array.from({ length: 12 }, (_, hour) => {
                 const minute = hour * 60;
                 const hourLabel = hour === 0 ? "12" : pad(hour);
@@ -263,14 +263,22 @@ export default function Home() {
                 const b = polar(minute, hour % 3 === 0 ? 158 : 163);
                 return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 3 === 0 ? "major-tick" : "minor-tick"} /><text x={polar(minute, 145).x} y={polar(minute, 145).y} className="hour-label">{hourLabel}</text></g>;
               })}
-              {dayTasks.map(task => {
+              {dayTasks.flatMap(task => {
                 const end = task.start + task.duration;
                 const upcoming = end > dialAnchor && task.start < dialAnchor + 720;
-                const offset = upcoming ? Math.max(task.start, dialAnchor) % 720 : task.start % 720;
-                const duration = upcoming ? Math.min(end - Math.max(task.start, dialAnchor), 720 - offset) : Math.min(task.duration, 720);
-                const inner = upcoming ? 111 : 68;
-                const outer = upcoming ? 139 : 91;
-                return <path key={task.id} d={sectorPath(offset, duration, inner, outer)} fill="none" stroke={COLORS[task.category]} strokeWidth={outer - inner} strokeLinecap="round" opacity={task.done ? .25 : upcoming ? .92 : .48} className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />;
+                const renderSegment = (segmentStart: number, segmentDuration: number, morning: boolean, suffix: string) => {
+                  const offset = segmentStart % 720;
+                  const inner = morning ? 91 : 121;
+                  const outer = morning ? 119 : 149;
+                  return <path key={`${task.id}-${suffix}`} d={sectorPath(offset, segmentDuration, inner, outer)} fill="none" stroke={COLORS[task.category]} strokeWidth={outer - inner} strokeLinecap="round" opacity={task.done ? .25 : upcoming ? .92 : .48} className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />;
+                };
+                const morningDuration = task.start < 720 ? Math.min(task.duration, 720 - task.start) : 0;
+                const afternoonStart = Math.max(task.start, 720);
+                const afternoonDuration = Math.max(0, end - afternoonStart);
+                return [
+                  morningDuration > 0 ? renderSegment(task.start, morningDuration, true, "am") : null,
+                  afternoonDuration > 0 ? renderSegment(afternoonStart, afternoonDuration, false, "pm") : null
+                ];
               })}
               {dragPreview && (() => {
                 const task = dayTasks.find(item => item.id === dragPreview.taskId);
@@ -284,7 +292,7 @@ export default function Home() {
               {selectedDate === todayString() && <g><line x1={polar(dialAnchor % 720, 55).x} y1={polar(dialAnchor % 720, 55).y} x2={polar(dialAnchor % 720, 174).x} y2={polar(dialAnchor % 720, 174).y} className="now-line" /><circle cx={polar(dialAnchor % 720, 174).x} cy={polar(dialAnchor % 720, 174).y} r="5" className="now-dot" /></g>}
             </svg>
           </div>
-          <div className="dial-hint"><span className="hint-icon">↻</span> Внешнее кольцо — ближайшие 12 часов. Внутреннее — прошедшие дела и задачи позже. Перетаскивай сектор: время покажется над циферблатом.</div>
+          <div className="dial-hint"><span className="hint-icon">↻</span> Внутреннее кольцо — дела с 00:00 до 12:00, внешнее — с 12:00 до 24:00. Так одинаковое время утра и вечера не накладывается друг на друга. Яркость показывает ближайшие 12 часов. Перетаскивай сектор, чтобы изменить время.</div>
           <div className="legend"><span><i className="legend-dot" style={{ background: COLORS["Работа"] }} />Работа</span><span><i className="legend-dot" style={{ background: COLORS["Спорт"] }} />Спорт</span><span><i className="legend-dot" style={{ background: COLORS["Отдых"] }} />Отдых</span><span><i className="legend-dot" style={{ background: COLORS["Быт"] }} />Быт</span><span><i className="legend-dot" style={{ background: COLORS["Личное"] }} />Личное</span></div>
           <div className="day-balance"><div className="balance-head"><span>Баланс дня</span><strong>{Math.round(plannedMinutes / 1440 * 100)}% <small>распланировано</small></strong></div><div className="balance-bar"><span style={{ width: `${Math.min(100, plannedMinutes / 1440 * 100)}%` }} /></div><div className="balance-foot"><span><i className="balance-dot planned" />{Math.floor(plannedMinutes / 60)} ч занято</span><span><i className="balance-dot free" />{Math.floor(freeMinutes / 60)} ч свободно</span></div></div>
         </section>
