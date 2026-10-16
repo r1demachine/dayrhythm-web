@@ -141,7 +141,9 @@ export default function Home() {
     const x = ((event.clientX - rect.left) / rect.width) * 400;
     const y = ((event.clientY - rect.top) / rect.height) * 400;
     const angle = (Math.atan2(y - 200, x - 200) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
-    return Math.min(1435, Math.max(0, Math.round((dialAnchor + angle / (Math.PI * 2) * 720) / 15) * 15));
+    const clockMinute = angle / (Math.PI * 2) * 720;
+    const delta = (clockMinute - (dialAnchor % 720) + 720) % 720;
+    return Math.min(1435, Math.max(0, Math.round((dialAnchor + delta) / 15) * 15));
   };
   const onDialPointerMove = (event: PointerEvent<SVGSVGElement>) => {
     if (!dragRef.current || !dragOriginRef.current) return;
@@ -249,12 +251,12 @@ export default function Home() {
                 const minute = hour * 60;
                 const a = polar(minute, hour % 3 === 0 ? 174 : 169);
                 const b = polar(minute, hour % 3 === 0 ? 158 : 163);
-                return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 3 === 0 ? "major-tick" : "minor-tick"} /><text x={polar(minute, 145).x} y={polar(minute, 145).y} className="hour-label">{timeText((dialAnchor + minute) % 1440)}</text></g>;
+                return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 3 === 0 ? "major-tick" : "minor-tick"} /><text x={polar(minute, 145).x} y={polar(minute, 145).y} className="hour-label">{hourLabel}</text></g>;
               })}
               {dayTasks.map(task => {
                 const end = task.start + task.duration;
                 const upcoming = end > dialAnchor && task.start < dialAnchor + 720;
-                const offset = upcoming ? Math.max(0, task.start - dialAnchor) : ((task.start - dialAnchor) % 720 + 720) % 720;
+                const offset = upcoming ? Math.max(task.start, dialAnchor) % 720 : task.start % 720;
                 const duration = upcoming ? Math.min(end - Math.max(task.start, dialAnchor), 720 - offset) : Math.min(task.duration, 720);
                 const inner = upcoming ? 111 : 68;
                 const outer = upcoming ? 139 : 91;
@@ -262,14 +264,14 @@ export default function Home() {
               })}
               {dragPreview && (() => {
                 const task = dayTasks.find(item => item.id === dragPreview.taskId);
-                const offset = Math.max(0, Math.min(720, dragPreview.minute - dialAnchor));
+                const offset = dragPreview.minute % 720;
                 return task ? <path d={sectorPath(offset, Math.min(task.duration, 720 - offset), 108, 142)} fill={COLORS[task.category]} opacity=".5" stroke="var(--text)" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none" /> : null;
               })()}
               <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="183" className="center-overline">{selectedDate === todayString() ? "СЕЙЧАС" : "НАЧАЛО ОКНА"}</text>
               <text x="200" y="215" className="center-time">{timeText(dialAnchor)}</text>
               <text x="200" y="234" className="center-caption">ближайшие 12 часов</text>
-              {selectedDate === todayString() && <g><line x1={polar(0, 55).x} y1={polar(0, 55).y} x2={polar(0, 174).x} y2={polar(0, 174).y} className="now-line" /><circle cx={polar(0, 174).x} cy={polar(0, 174).y} r="5" className="now-dot" /></g>}
+              {selectedDate === todayString() && <g><line x1={polar(dialAnchor % 720, 55).x} y1={polar(dialAnchor % 720, 55).y} x2={polar(dialAnchor % 720, 174).x} y2={polar(dialAnchor % 720, 174).y} className="now-line" /><circle cx={polar(dialAnchor % 720, 174).x} cy={polar(dialAnchor % 720, 174).y} r="5" className="now-dot" /></g>}
             </svg>
           </div>
           <div className="dial-hint"><span className="hint-icon">↻</span> Внешнее кольцо — ближайшие 12 часов. Внутреннее — прошедшие дела и задачи позже. Перетаскивай сектор: время покажется над циферблатом.</div>
