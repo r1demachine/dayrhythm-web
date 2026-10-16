@@ -77,6 +77,36 @@ export const makeId = () => typeof crypto !== "undefined" && "randomUUID" in cry
   ? crypto.randomUUID()
   : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+export function taskOccursOnDate(task: Task, date: string): boolean {
+  if (task.inbox || task.date > date) return false;
+  if (task.date === date) return true;
+  if (task.recurrence === "daily") return true;
+  if (task.recurrence === "weekly") {
+    return new Date(task.date + "T12:00:00").getDay() === new Date(date + "T12:00:00").getDay();
+  }
+  return false;
+}
+
+export function taskDialSegments(task: Task, mode: Exclude<DialMode, "auto">): Array<{ start: number; duration: number }> {
+  if (mode === "24h") return [{ start: task.start, duration: Math.min(task.duration, 1440 - task.start) }];
+  const windowStart = mode === "day" ? 360 : 1080;
+  const windowEnd = mode === "day" ? 1080 : 1800;
+  let taskStart = task.start;
+  if (mode === "night" && taskStart < 360) taskStart += 1440;
+  const taskEnd = taskStart + task.duration;
+  const clippedStart = Math.max(taskStart, windowStart);
+  const clippedEnd = Math.min(taskEnd, windowEnd);
+  if (clippedEnd <= clippedStart) return [];
+  const scale = 1440 / (windowEnd - windowStart);
+  return [{ start: (clippedStart - windowStart) * scale, duration: (clippedEnd - clippedStart) * scale }];
+}
+
+export function actualMinuteForDialMinute(value: number, mode: Exclude<DialMode, "auto">): number {
+  if (mode === "day") return Math.round(360 + value / 2) % 1440;
+  if (mode === "night") return Math.round(1080 + value / 2) % 1440;
+  return Math.round(value) % 1440;
+}
+
 export function normalizeCategory(input: unknown): Category {
   const text = String(input ?? "").toLowerCase();
   if (/sport|gym|exercise|health|fitness|бег|спорт|зал|тренир|здоров/.test(text)) return "Спорт";
