@@ -282,8 +282,15 @@ export default function Home() {
               })}
               {dragPreview && (() => {
                 const task = dayTasks.find(item => item.id === dragPreview.taskId);
-                const offset = dragPreview.minute % 720;
-                return task ? <path d={sectorPath(offset, Math.min(task.duration, 720 - offset), 108, 142)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" /> : null;
+                if (!task) return null;
+                const end = dragPreview.minute + task.duration;
+                const morningDuration = dragPreview.minute < 720 ? Math.min(task.duration, 720 - dragPreview.minute) : 0;
+                const afternoonStart = Math.max(dragPreview.minute, 720);
+                const afternoonDuration = Math.max(0, end - afternoonStart);
+                return <>
+                  {morningDuration > 0 && <path d={sectorPath(dragPreview.minute, morningDuration, 91, 119)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                  {afternoonDuration > 0 && <path d={sectorPath(afternoonStart, afternoonDuration, 121, 149)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" />}
+                </>;
               })()}
               <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="183" className="center-overline">{selectedDate === todayString() ? "СЕЙЧАС" : "НАЧАЛО ОКНА"}</text>
