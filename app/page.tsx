@@ -1,36 +1,18 @@
 "use client";
 
 import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import FeatureViews from "./components/FeatureViews";
+import { CATEGORIES, CATEGORY_EMOJI, COLORS, actualMinuteForDialMinute, dateText, makeId, normalizeTask, pad, taskDialSegments, taskOccursOnDate, timeText, todayString } from "@/lib/dayrhythm";
+import type { AppView, Category, ClockFormat, DialMode, Recurrence, Task } from "@/lib/dayrhythm";
+import { getSavedSession, saveSession, syncTasksWithCloud } from "@/lib/supabase-rest";
+import type { DeletedTaskMap } from "@/lib/supabase-rest";
 
-type Category = "Работа" | "Спорт" | "Отдых" | "Быт" | "Личное";
-type Task = {
-  id: string;
-  title: string;
-  date: string;
-  start: number;
-  duration: number;
-  category: Category;
-  done: boolean;
-  note: string;
-};
-const CATEGORIES: Category[] = ["Работа", "Спорт", "Отдых", "Быт", "Личное"];
-const COLORS: Record<Category, string> = {
-  "Работа": "#6266e9",
-  "Спорт": "#f36c45",
-  "Отдых": "#20a68a",
-  "Быт": "#d6a52d",
-  "Личное": "#bc75c9"
-};
 const STORAGE_KEY = "dayrhythm.tasks.v1";
 const THEME_KEY = "dayrhythm.theme.v1";
-const pad = (n: number) => String(n).padStart(2, "0");
-const timeText = (minutes: number) => `${pad(Math.floor(minutes / 60) % 24)}:${pad(minutes % 60)}`;
-const dateText = (date: string) => new Date(date + "T12:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
-const todayString = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-const makeId = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const CLOCK_FORMAT_KEY = "dayrhythm.clock-format.v1";
+const DIAL_MODE_KEY = "dayrhythm.dial-mode.v1";
+const NOTIFICATIONS_KEY = "dayrhythm.notifications.v1";
+const DELETED_KEY = "dayrhythm.deleted.v1";
 const polar = (minutes: number, radius: number, cx = 200, cy = 200) => {
   const angle = (minutes / 1440) * Math.PI * 2 - Math.PI / 2;
   // Стабилизируем SVG-атрибуты: сервер и браузер могут чуть различаться в последних знаках Math.sin/cos.
@@ -50,7 +32,13 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayString);
   const [ready, setReady] = useState(false);
+  const [activeView, setActiveView] = useState<AppView>("schedule");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [clockFormat, setClockFormat] = useState<ClockFormat>("24h");
+  const [dialMode, setDialMode] = useState<DialMode>("24h");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [deletedAt, setDeletedAt] = useState<DeletedTaskMap>({});
+  const [cloudAuthRevision, setCloudAuthRevision] = useState(0);
   const [editing, setEditing] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -58,6 +46,15 @@ export default function Home() {
   const [duration, setDuration] = useState("60");
   const [category, setCategory] = useState<Category>("Работа");
   const [note, setNote] = useState("");
+  const [taskInsight, setTaskInsight] = useState<{ insight: string; suggestions: string[] } | null>(null);
+  const [taskInsightLoading, setTaskInsightLoading] = useState(false);
+  const [taskInsightError, setTaskInsightError] = useState("");
+  const [emoji, setEmoji] = useState("💼");
+  const [colorHex, setColorHex] = useState(COLORS["Работа"]);
+  const [participants, setParticipants] = useState("");
+  const [reminderMinutes, setReminderMinutes] = useState("none");
+  const [recurrence, setRecurrence] = useState<Recurrence>("none");
+  const [isInboxTask, setIsInboxTask] = useState(false);
   const [filter, setFilter] = useState<"Все" | Category>("Все");
   const [now, setNow] = useState(0);
   const [notice, setNotice] = useState("");
@@ -65,23 +62,118 @@ export default function Home() {
   const dragRef = useRef<string | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const suppressSectorClickRef = useRef(false);
+  const autoSyncInFlightRef = useRef(false);
+  const lastSyncedSignatureRef = useRef("");
+  const latestTasksRef = useRef<Task[]>(tasks);
+  const latestDeletedAtRef = useRef<DeletedTaskMap>(deletedAt);
+  latestTasksRef.current = tasks;
+  latestDeletedAtRef.current = deletedAt;
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setTasks(JSON.parse(saved) as Task[]);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setTasks(parsed.map(value => normalizeTask(value)).filter((value): value is Task => Boolean(value)));
+        }
+      }
       const savedTheme = localStorage.getItem(THEME_KEY);
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
+      const savedClock = localStorage.getItem(CLOCK_FORMAT_KEY);
+      if (savedClock === "12h" || savedClock === "24h") setClockFormat(savedClock);
+      const savedDial = localStorage.getItem(DIAL_MODE_KEY);
+      if (savedDial === "24h" || savedDial === "day" || savedDial === "night" || savedDial === "auto") setDialMode(savedDial);
+      setNotificationsEnabled(localStorage.getItem(NOTIFICATIONS_KEY) === "true");
+      const savedDeleted = localStorage.getItem(DELETED_KEY);
+      if (savedDeleted) {
+        const value: unknown = JSON.parse(savedDeleted);
+        if (value && typeof value === "object" && !Array.isArray(value)) setDeletedAt(value as DeletedTaskMap);
+      }
     } catch { setNotice("Не удалось прочитать сохранённые данные браузера."); }
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready) localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  }, [tasks, ready]);
+    if (ready) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      localStorage.setItem(DELETED_KEY, JSON.stringify(deletedAt));
+      localStorage.setItem(THEME_KEY, theme);
+      localStorage.setItem(CLOCK_FORMAT_KEY, clockFormat);
+      localStorage.setItem(DIAL_MODE_KEY, dialMode);
+      localStorage.setItem(NOTIFICATIONS_KEY, String(notificationsEnabled));
+    }
+  }, [tasks, deletedAt, theme, clockFormat, dialMode, notificationsEnabled, ready]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    if (ready) localStorage.setItem(THEME_KEY, theme);
-  }, [theme, ready]);
+  }, [theme]);
+  useEffect(() => {
+    const retryCloudSync = () => setCloudAuthRevision(value => value + 1);
+    window.addEventListener("online", retryCloudSync);
+    return () => window.removeEventListener("online", retryCloudSync);
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    const signature = JSON.stringify({ tasks, deletedAt });
+    if (signature === lastSyncedSignatureRef.current || autoSyncInFlightRef.current) return;
+    const session = getSavedSession();
+    if (!session) return;
+    const timer = window.setTimeout(async () => {
+      if (autoSyncInFlightRef.current) return;
+      autoSyncInFlightRef.current = true;
+      try {
+        const result = await syncTasksWithCloud(session, tasks, deletedAt);
+        saveSession(result.session);
+        const latestTasks = latestTasksRef.current;
+        const latestDeletedAt = latestDeletedAtRef.current;
+        const changedDuringRequest =
+          JSON.stringify(latestTasks) !== JSON.stringify(tasks) ||
+          JSON.stringify(latestDeletedAt) !== JSON.stringify(deletedAt);
+
+        if (!changedDuringRequest) {
+          lastSyncedSignatureRef.current = JSON.stringify({ tasks: result.tasks, deletedAt: result.deletedAt });
+          if (JSON.stringify(tasks) !== JSON.stringify(result.tasks)) setTasks(result.tasks);
+          if (JSON.stringify(deletedAt) !== JSON.stringify(result.deletedAt)) setDeletedAt(result.deletedAt);
+        } else {
+          // Keep local edits/deletes made while the network request was running.
+          const mergedDeletedAt: DeletedTaskMap = { ...result.deletedAt };
+          for (const [id, deletedTime] of Object.entries(latestDeletedAt)) {
+            mergedDeletedAt[id] = Math.max(mergedDeletedAt[id] ?? 0, deletedTime);
+          }
+          const remoteById = new Map(result.tasks.map(task => [task.id, task]));
+          const mergedTasks = new Map<string, Task>();
+          for (const remoteTask of result.tasks) {
+            const localTask = latestTasks.find(task => task.id === remoteTask.id);
+            const candidate: Task = localTask && (localTask.updatedAt ?? 0) > (remoteTask.updatedAt ?? 0)
+              ? localTask
+              : remoteTask;
+            if ((candidate.updatedAt ?? 0) > (mergedDeletedAt[candidate.id] ?? 0)) {
+              mergedTasks.set(candidate.id, candidate);
+            }
+          }
+          for (const localTask of latestTasks) {
+            if (remoteById.has(localTask.id)) continue;
+            if ((localTask.updatedAt ?? 0) > (mergedDeletedAt[localTask.id] ?? 0)) {
+              mergedTasks.set(localTask.id, localTask);
+            }
+          }
+          for (const task of mergedTasks.values()) {
+            if ((task.updatedAt ?? 0) > (mergedDeletedAt[task.id] ?? 0)) delete mergedDeletedAt[task.id];
+          }
+          setTasks(Array.from(mergedTasks.values()));
+          setDeletedAt(mergedDeletedAt);
+          // Schedule another sync for edits that were made during the request.
+          lastSyncedSignatureRef.current = "";
+        }
+      } catch {
+        // Keep local edits; retry on the next data/auth change or from Settings.
+        lastSyncedSignatureRef.current = "";
+        setNotice("Не удалось синхронизировать данные с облаком. Проверь подключение в настройках.");
+      } finally {
+        autoSyncInFlightRef.current = false;
+      }
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [tasks, deletedAt, ready, cloudAuthRevision]);
   useEffect(() => {
     const update = () => {
       const d = new Date();
@@ -91,26 +183,76 @@ export default function Home() {
     const timer = window.setInterval(update, 30000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!ready || !notificationsEnabled || typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return;
+    const currentDate = todayString();
+    const firedKey = "dayrhythm.fired-reminders.v1";
+    let fired: Record<string, number> = {};
+    try { fired = JSON.parse(localStorage.getItem(firedKey) || "{}") as Record<string, number>; } catch { fired = {}; }
+    for (const task of tasks) {
+      const occurrenceDone = task.recurrence === "none"
+        ? task.done
+        : (task.completedDates ?? (task.done ? [task.date] : [])).includes(currentDate);
+      if (task.inbox || task.reminderMinutes == null || occurrenceDone || !taskOccursOnDate(task, currentDate)) continue;
+      const reminderAt = task.start - task.reminderMinutes;
+      if (reminderAt < 0 || now < reminderAt || now >= reminderAt + 1) continue;
+      const id = `${currentDate}:${task.id}:${task.reminderMinutes}`;
+      if (fired[id]) continue;
+      try {
+        new Notification(`${task.emoji || CATEGORY_EMOJI[task.category]} ${task.title}`, {
+          body: task.reminderMinutes === 0 ? `Начинается сейчас · ${timeText(task.start, clockFormat)}` : `Начнётся через ${task.reminderMinutes} мин · ${timeText(task.start, clockFormat)}`
+        });
+        fired[id] = Date.now();
+      } catch { /* Notification permission can change while the app is open. */ }
+    }
+    localStorage.setItem(firedKey, JSON.stringify(fired));
+  }, [tasks, now, notificationsEnabled, ready, clockFormat]);
 
-  const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate).sort((a, b) => a.start - b.start), [tasks, selectedDate]);
+  const dayTasks = useMemo(() => tasks
+    .filter(task => taskOccursOnDate(task, selectedDate))
+    .map(task => {
+      if (task.recurrence === "none") return task;
+      const completedDates = task.completedDates ?? (task.done ? [task.date] : []);
+      return { ...task, date: selectedDate, done: completedDates.includes(selectedDate) };
+    })
+    .sort((a, b) => a.start - b.start), [tasks, selectedDate]);
   const shownTasks = dayTasks.filter(t => filter === "Все" || t.category === filter);
   const doneCount = dayTasks.filter(t => t.done).length;
   const plannedMinutes = dayTasks.reduce((sum, t) => sum + t.duration, 0);
   const freeMinutes = Math.max(0, 1440 - plannedMinutes);
-  const activeTask = dayTasks.find(t => now >= t.start && now < t.start + t.duration);
+  const activeTask = dayTasks.find(t => !t.inbox && now >= t.start && now < t.start + t.duration);
+  const effectiveDialMode: Exclude<DialMode, "auto"> = dialMode === "auto" ? (now >= 360 && now < 1080 ? "day" : "night") : dialMode;
+  const dialHours = effectiveDialMode === "24h"
+    ? Array.from({ length: 24 }, (_, hour) => hour)
+    : effectiveDialMode === "day"
+      ? Array.from({ length: 13 }, (_, index) => 6 + index)
+      : [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6];
+  const nowDialMinute = effectiveDialMode === "24h"
+    ? now
+    : effectiveDialMode === "day"
+      ? (now >= 360 && now <= 1080 ? (now - 360) * 2 : null)
+      : (now >= 1080 || now < 360 ? (now >= 1080 ? now - 1080 : now + 360) * 2 : null);
   const changeDate = (delta: number) => {
     const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + delta);
     setSelectedDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
   };
   const resetForm = () => {
-    setEditing(null); setTitle(""); setStart("09:00"); setDuration("60"); setCategory("Работа"); setNote(""); setShowForm(false);
+    setEditing(null); setTitle(""); setStart("09:00"); setDuration("60"); setCategory("Работа"); setNote("");
+    setEmoji(CATEGORY_EMOJI["Работа"]); setColorHex(COLORS["Работа"]); setParticipants(""); setReminderMinutes("none");
+    setRecurrence("none"); setIsInboxTask(false); setTaskInsight(null); setTaskInsightError(""); setShowForm(false);
   };
-  const openNew = (minute?: number) => {
-    setEditing(null); setTitle(""); setStart(timeText(minute ?? 540)); setDuration("60"); setCategory("Работа"); setNote(""); setShowForm(true);
+  const openNew = (minute?: number, inbox = false) => {
+    setEditing(null); setTitle(""); setStart(timeText(minute ?? 540)); setDuration("60"); setCategory("Работа"); setNote("");
+    setEmoji(CATEGORY_EMOJI["Работа"]); setColorHex(COLORS["Работа"]); setParticipants(""); setReminderMinutes("none");
+    setRecurrence("none"); setIsInboxTask(inbox); setTaskInsight(null); setTaskInsightError(""); setShowForm(true);
   };
   const openEdit = (task: Task) => {
-    setEditing(task.id); setTitle(task.title); setStart(timeText(task.start)); setDuration(String(task.duration)); setCategory(task.category); setNote(task.note); setShowForm(true);
+    setEditing(task.id); setTitle(task.title); setStart(timeText(task.start)); setDuration(String(task.duration));
+    setCategory(task.category); setNote(task.note); setEmoji(task.emoji || CATEGORY_EMOJI[task.category]);
+    setColorHex(task.colorHex || COLORS[task.category]); setParticipants((task.participants || []).join(", "));
+    setReminderMinutes(task.reminderMinutes == null ? "none" : String(task.reminderMinutes));
+    setRecurrence(task.recurrence || "none"); setIsInboxTask(Boolean(task.inbox)); setTaskInsight(null); setTaskInsightError(""); setShowForm(true);
   };
   const saveTask = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -118,17 +260,91 @@ export default function Home() {
     const startMinutes = h * 60 + m;
     const length = Math.min(1440 - startMinutes, Math.max(5, Number(duration) || 60));
     if (!title.trim()) return;
+    const updatedAt = Date.now();
+    const originalTask = editing ? tasks.find(task => task.id === editing) : undefined;
+    const taskDate = originalTask?.recurrence && recurrence !== "none" && !isInboxTask
+      ? originalTask.date
+      : selectedDate;
+    const taskFields = {
+      title: title.trim(), date: taskDate, start: startMinutes, duration: length, category,
+      note: note.trim(), emoji: emoji.trim() || CATEGORY_EMOJI[category], colorHex,
+      participants: participants.split(",").map(value => value.trim()).filter(Boolean).slice(0, 30),
+      reminderMinutes: reminderMinutes === "none" ? null : Number(reminderMinutes),
+      recurrence, completedDates: originalTask?.recurrence === recurrence ? originalTask.completedDates : undefined,
+      inbox: isInboxTask, updatedAt
+    };
     if (editing) {
-      setTasks(old => old.map(t => t.id === editing ? { ...t, title: title.trim(), date: selectedDate, start: startMinutes, duration: length, category, note: note.trim() } : t));
+      setTasks(old => old.map(t => t.id === editing ? { ...t, ...taskFields } : t));
+      setDeletedAt(old => { const next = { ...old }; delete next[editing]; return next; });
     } else {
-      setTasks(old => [...old, { id: makeId(), title: title.trim(), date: selectedDate, start: startMinutes, duration: length, category, done: false, note: note.trim() }]);
+      setTasks(old => [...old, { id: makeId(), ...taskFields, done: false, source: "manual" }]);
     }
     resetForm();
   };
-  const toggleDone = (id: string) => setTasks(old => old.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const deleteTask = (id: string) => setTasks(old => old.filter(t => t.id !== id));
+  const requestTaskInsight = async () => {
+    if (!title.trim()) return;
+    const [hour, minute] = start.split(":").map(Number);
+    setTaskInsightLoading(true);
+    setTaskInsightError("");
+    try {
+      const response = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "task-insight",
+          model: "groq",
+          task: {
+            title: title.trim(),
+            description: note.trim(),
+            startTime: hour * 60 + minute,
+            endTime: hour * 60 + minute + Number(duration),
+            duration: Number(duration),
+            category,
+            participants: participants.split(",").map(value => value.trim()).filter(Boolean)
+          }
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Совет AI недоступен.");
+      setTaskInsight({
+        insight: String(payload.insight ?? ""),
+        suggestions: Array.isArray(payload.suggestions) ? payload.suggestions.map(String).slice(0, 4) : []
+      });
+      if (!payload.insight) throw new Error("AI не вернул рекомендацию.");
+    } catch (error) {
+      setTaskInsightError(error instanceof Error ? error.message : "Не удалось получить совет AI.");
+    } finally {
+      setTaskInsightLoading(false);
+    }
+  };
+
+  const toggleDone = (id: string) => {
+    const task = tasks.find(item => item.id === id);
+    if (task?.recurrence && task.recurrence !== "none") {
+      const completedDates = task.completedDates ?? (task.done ? [task.date] : []);
+      const alreadyDone = completedDates.includes(selectedDate);
+      setTasks(old => old.map(item => item.id === id ? {
+        ...item,
+        done: false,
+        completedDates: alreadyDone
+          ? completedDates.filter(date => date !== selectedDate)
+          : [...completedDates, selectedDate],
+        updatedAt: Date.now()
+      } : item));
+      return;
+    }
+    setTasks(old => old.map(item => item.id === id ? { ...item, done: !item.done, updatedAt: Date.now() } : item));
+  };
+  const deleteTask = (id: string) => {
+    setDeletedAt(old => ({ ...old, [id]: Date.now() }));
+    setTasks(old => old.filter(t => t.id !== id));
+  };
   const moveTask = useCallback((id: string, minute: number) => {
-    setTasks(old => old.map(t => t.id === id ? { ...t, start: Math.min(1435, Math.max(0, Math.round(minute / 15) * 15)), duration: Math.min(t.duration, 1440 - Math.min(1435, Math.max(0, Math.round(minute / 15) * 15))) } : t));
+    setTasks(old => old.map(t => {
+      if (t.id !== id) return t;
+      const startMinute = Math.min(1435, Math.max(0, Math.round(minute / 15) * 15));
+      return { ...t, start: startMinute, duration: Math.min(t.duration, 1440 - startMinute), updatedAt: Date.now() };
+    }));
   }, []);
   const onDialPointerUp = (event: PointerEvent<SVGSVGElement>) => {
     if (!dragRef.current || !dialRef.current) return;
@@ -143,10 +359,10 @@ export default function Home() {
     const x = ((event.clientX - rect.left) / rect.width) * 400;
     const y = ((event.clientY - rect.top) / rect.height) * 400;
     const angle = (Math.atan2(y - 200, x - 200) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
-    moveTask(taskId, angle / (Math.PI * 2) * 1440);
+    moveTask(taskId, actualMinuteForDialMinute(angle / (Math.PI * 2) * 1440, effectiveDialMode));
   };
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, tasks }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 2, tasks, deletedAt }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a"); link.href = url; link.download = `dayrhythm-backup-${selectedDate}.json`; link.click();
     URL.revokeObjectURL(url); setNotice("Резервная копия скачана.");
@@ -158,7 +374,10 @@ export default function Home() {
       try {
         const parsed = JSON.parse(String(reader.result));
         if (!Array.isArray(parsed.tasks)) throw new Error("invalid");
-        setTasks(parsed.tasks); setNotice("Резервная копия импортирована.");
+        const imported = parsed.tasks.map((value: unknown) => normalizeTask(value)).filter((value: Task | null): value is Task => Boolean(value));
+        setTasks(imported);
+        if (parsed.deletedAt && typeof parsed.deletedAt === "object" && !Array.isArray(parsed.deletedAt)) setDeletedAt(parsed.deletedAt as DeletedTaskMap);
+        setNotice(`Резервная копия импортирована: ${imported.length} задач.`);
       } catch { setNotice("Не удалось импортировать файл. Выберите резервную копию DayRhythm JSON."); }
     };
     reader.readAsText(file);
@@ -176,6 +395,25 @@ export default function Home() {
         </div>
       </header>
 
+      <nav className="app-navigation" aria-label="Разделы DayRhythm">
+        {([
+          ["schedule", "День", "◷"],
+          ["calendar", "Календарь", "▦"],
+          ["timeline", "Лента времени", "↕"],
+          ["ai", "AI-план", "✦"],
+          ["insights", "Аналитика", "▥"],
+          ["inbox", "Входящие", "↓"],
+          ["settings", "Настройки", "⚙"]
+        ] as [AppView, string, string][]).map(([view, label, glyph]) => (
+          <button key={view} className={activeView === view ? "app-nav-item active" : "app-nav-item"} onClick={() => setActiveView(view)} aria-current={activeView === view ? "page" : undefined}>
+            <span>{glyph}</span>{label}
+            {view === "inbox" && tasks.filter(task => task.inbox).length > 0 && <i>{tasks.filter(task => task.inbox).length}</i>}
+          </button>
+        ))}
+      </nav>
+      {notice && <button className="notice" onClick={() => setNotice("")}>{notice} <span>×</span></button>}
+      {activeView === "schedule" ? (
+      <>
       <section className="welcome-row">
         <div><div className="eyebrow">ТВОЙ ДЕНЬ · ТВОЙ РИТМ</div><h1>Время — твой главный ресурс.</h1><p className="subtitle">Собери день в цельную картину. Планируй не список дел, а своё время.</p></div>
         <button className="primary-button new-task-top" onClick={() => openNew()}><span>＋</span> Новая задача</button>
@@ -191,8 +429,6 @@ export default function Home() {
         <div className="day-stats"><div><strong>{dayTasks.length}</strong><span>задач</span></div><i /><div><strong>{Math.floor(plannedMinutes / 60)}<small>ч</small> {plannedMinutes % 60}<small>м</small></strong><span>запланировано</span></div><i /><div><strong>{doneCount}/{dayTasks.length}</strong><span>выполнено</span></div></div>
       </section>
 
-      {notice && <button className="notice" onClick={() => setNotice("")}>{notice} <span>×</span></button>}
-
       <div className="workspace">
         <section className="dial-panel panel">
           <div className="panel-heading"><div><div className="eyebrow">24 ЧАСА · ОДИН ВЗГЛЯД</div><h2>Круг твоего дня</h2></div><span className="live-pill"><span /> {selectedDate === todayString() ? "СЕГОДНЯ" : "ПЛАН"}</span></div>
@@ -200,20 +436,24 @@ export default function Home() {
             <svg ref={dialRef} className="dial" viewBox="0 0 400 400" role="img" aria-label="Круговой циферблат суток" onPointerUp={onDialPointerUp}>
               <defs><filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter></defs>
               <circle cx="200" cy="200" r="166" className="dial-track" />
-              {Array.from({ length: 24 }, (_, hour) => {
-                const a = polar(hour * 60, hour % 6 === 0 ? 174 : 169);
-                const b = polar(hour * 60, hour % 6 === 0 ? 158 : 162);
-                return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 6 === 0 ? "major-tick" : "minor-tick"} />{hour % 3 === 0 && <text x={polar(hour * 60, 145).x} y={polar(hour * 60, 145).y} className="hour-label">{pad(hour)}</text>}</g>;
+              {dialHours.map((hour, index) => {
+                const minute = effectiveDialMode === "24h" ? hour * 60 : effectiveDialMode === "day" ? (hour - 6) * 120 : (hour >= 18 ? hour - 18 : hour + 6) * 120;
+                const major = effectiveDialMode === "24h" ? hour % 6 === 0 : hour % 2 === 0;
+                const showLabel = effectiveDialMode === "24h" ? hour % 3 === 0 : hour % 2 === 0;
+                const a = polar(minute, major ? 174 : 169);
+                const b = polar(minute, major ? 158 : 162);
+                const label = polar(minute, 145);
+                return <g key={`${effectiveDialMode}-${hour}-${index}`}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={major ? "major-tick" : "minor-tick"} />{showLabel && <text x={label.x} y={label.y} className="hour-label">{pad(hour)}</text>}</g>;
               })}
-              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
+              {dayTasks.flatMap(task => taskDialSegments(task, effectiveDialMode).map((segment, segmentIndex) => <path key={`${task.id}-${segmentIndex}`} d={sectorPath(segment.start, segment.duration, 93, 127)} fill={task.colorHex || COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start, clockFormat)}`} />))}
               <circle cx="200" cy="200" r="88" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="178" className="center-overline">ТВОЁ ВРЕМЯ</text>
-              <text x="200" y="216" className="center-time">{timeText(now)}</text>
+              <text x="200" y="216" className="center-time">{timeText(now, clockFormat)}</text>
               <text x="200" y="240" className="center-caption">{activeTask ? activeTask.title : "каждый час имеет значение"}</text>
-              {selectedDate === todayString() && <g><line x1={polar(now, 84).x} y1={polar(now, 84).y} x2={polar(now, 174).x} y2={polar(now, 174).y} className="now-line" /><circle cx={polar(now, 174).x} cy={polar(now, 174).y} r="5" className="now-dot" /></g>}
+              {selectedDate === todayString() && nowDialMinute !== null && <g><line x1={polar(nowDialMinute, 84).x} y1={polar(nowDialMinute, 84).y} x2={polar(nowDialMinute, 174).x} y2={polar(nowDialMinute, 174).y} className="now-line" /><circle cx={polar(nowDialMinute, 174).x} cy={polar(nowDialMinute, 174).y} r="5" className="now-dot" /></g>}
             </svg>
           </div>
-          <div className="dial-hint"><span className="hint-icon">↻</span> Нажми на сектор задачи, чтобы изменить её. Перетащи сектор по кругу, чтобы сдвинуть время.</div>
+          <div className="dial-hint"><span className="hint-icon">↻</span> Нажми на сектор, чтобы изменить задачу. Перетаскивай сектор для переноса по времени; режим циферблата можно сменить в настройках.</div>
           <div className="legend"><span><i className="legend-dot" style={{ background: COLORS["Работа"] }} />Работа</span><span><i className="legend-dot" style={{ background: COLORS["Спорт"] }} />Спорт</span><span><i className="legend-dot" style={{ background: COLORS["Отдых"] }} />Отдых</span><span><i className="legend-dot" style={{ background: COLORS["Быт"] }} />Быт</span><span><i className="legend-dot" style={{ background: COLORS["Личное"] }} />Личное</span></div>
           <div className="day-balance"><div className="balance-head"><span>Баланс дня</span><strong>{Math.round(plannedMinutes / 1440 * 100)}% <small>распланировано</small></strong></div><div className="balance-bar"><span style={{ width: `${Math.min(100, plannedMinutes / 1440 * 100)}%` }} /></div><div className="balance-foot"><span><i className="balance-dot planned" />{Math.floor(plannedMinutes / 60)} ч занято</span><span><i className="balance-dot free" />{Math.floor(freeMinutes / 60)} ч свободно</span></div></div>
         </section>
@@ -224,7 +464,7 @@ export default function Home() {
           <div className="task-list">
             {shownTasks.length === 0 ? <div className="empty-state"><div className="empty-art"><span>＋</span></div><h3>{dayTasks.length ? "В этой категории пусто" : "День начинается с идеи"}</h3><p>{dayTasks.length ? "Выбери другую категорию или добавь задачу." : "Добавь первую задачу и собери свой ритм на сегодня."}</p><button className="primary-button" onClick={() => openNew()}>＋ Добавить задачу</button></div> : shownTasks.map(task => <article className={task.done ? "task-card completed" : "task-card"} key={task.id}>
               <button className={task.done ? "task-check checked" : "task-check"} onClick={() => toggleDone(task.id)} aria-label={task.done ? "Отменить выполнение" : "Отметить выполненной"}>{task.done ? "✓" : ""}</button>
-              <button className="task-main" onClick={() => openEdit(task)}><span className="task-time">{timeText(task.start)} <i /> {timeText(task.start + task.duration)}</span><strong>{task.title}</strong>{task.note && <span className="task-note">{task.note}</span>}<span className="task-meta"><i style={{ background: COLORS[task.category] }} />{task.category}<span>·</span>{task.duration >= 60 ? `${Math.floor(task.duration / 60)} ч${task.duration % 60 ? ` ${task.duration % 60} мин` : ""}` : `${task.duration} мин`}</span></button>
+              <button className="task-main" onClick={() => openEdit(task)}><span className="task-time">{timeText(task.start, clockFormat)} <i /> {timeText(task.start + task.duration, clockFormat)}</span><strong>{task.emoji || CATEGORY_EMOJI[task.category]} {task.title}</strong>{task.note && <span className="task-note">{task.note}</span>}<span className="task-meta"><i style={{ background: COLORS[task.category] }} />{task.category}<span>·</span>{task.duration >= 60 ? `${Math.floor(task.duration / 60)} ч${task.duration % 60 ? ` ${task.duration % 60} мин` : ""}` : `${task.duration} мин`}</span></button>
               <button className="more-button" onClick={() => openEdit(task)} aria-label="Изменить задачу">···</button>
             </article>)}
           </div>
@@ -234,12 +474,44 @@ export default function Home() {
       </div>
 
       <footer className="app-footer"><span>dayrhythm.ai <span className="footer-dot">·</span> Найди свой ритм.</span><span>Твои данные остаются у тебя <span className="privacy-mark">↗</span></span></footer>
+      </>
+      ) : (
+        <FeatureViews
+          view={activeView}
+          tasks={tasks}
+          setTasks={setTasks}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          clockFormat={clockFormat}
+          setClockFormat={setClockFormat}
+          dialMode={dialMode}
+          setDialMode={setDialMode}
+          theme={theme}
+          setTheme={setTheme}
+          notificationsEnabled={notificationsEnabled}
+          setNotificationsEnabled={setNotificationsEnabled}
+          deletedAt={deletedAt}
+          setDeletedAt={setDeletedAt}
+          onCloudSessionChanged={() => setCloudAuthRevision(value => value + 1)}
+          onOpenDay={(date) => { setSelectedDate(date); setActiveView("schedule"); }}
+          onCreateTask={(date, inbox = false) => { if (date) setSelectedDate(date); openNew(undefined, inbox); setActiveView("schedule"); }}
+          onEditTask={(task) => { openEdit(task); setActiveView("schedule"); }}
+          onToggleDone={toggleDone}
+          onDeleteTask={deleteTask}
+          setNotice={setNotice}
+        />
+      )}
 
       {showForm && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) resetForm(); }}><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="form-title"><div className="modal-head"><div><div className="eyebrow">{editing ? "НАСТРОЙКА ПЛАНА" : "НОВАЯ ЗАПИСЬ"}</div><h2 id="form-title">{editing ? "Изменить задачу" : "Добавить задачу"}</h2></div><button className="icon-button" onClick={resetForm} aria-label="Закрыть">×</button></div>
         <form onSubmit={saveTask}><label className="field-label">Название задачи<input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="Например, тренировка на станке" maxLength={100} required /></label>
           <div className="field-grid"><label className="field-label">Начало<input type="time" value={start} onChange={e => setStart(e.target.value)} required /></label><label className="field-label">Длительность<select value={duration} onChange={e => setDuration(e.target.value)}>{[5,15,30,45,60,75,90,120,150,180,240,300,360,480,600,720].map(n => <option value={n} key={n}>{n < 60 ? `${n} минут` : `${Math.floor(n / 60)} ч${n % 60 ? ` ${n % 60} мин` : ""}`}</option>)}</select></label></div>
-          <label className="field-label">Категория<div className="category-picker">{CATEGORIES.map(cat => <button type="button" key={cat} onClick={() => setCategory(cat)} className={category === cat ? "category-option active" : "category-option"}><i style={{ background: COLORS[cat] }} />{cat}</button>)}</div></label>
+          <label className="field-label">Категория<div className="category-picker">{CATEGORIES.map(cat => <button type="button" key={cat} onClick={() => { setCategory(cat); setEmoji(CATEGORY_EMOJI[cat]); setColorHex(COLORS[cat]); }} className={category === cat ? "category-option active" : "category-option"}><i style={{ background: COLORS[cat] }} />{cat}</button>)}</div></label>
+          <div className="field-grid"><label className="field-label">Эмодзи<input value={emoji} onChange={e => setEmoji(e.target.value)} maxLength={8} placeholder="💼" /></label><label className="field-label color-field">Цвет задачи<input type="color" value={colorHex} onChange={e => setColorHex(e.target.value)} /></label></div>
+          <label className="field-label">Участники <span className="optional-label">необязательно, через запятую</span><input value={participants} onChange={e => setParticipants(e.target.value)} maxLength={250} placeholder="Например, Саша, Маша" /></label>
+          <div className="field-grid"><label className="field-label">Напоминание<select value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)}><option value="none">Без напоминания</option><option value="0">В момент начала</option><option value="5">За 5 минут</option><option value="10">За 10 минут</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option><option value="60">За час</option></select></label><label className="field-label">Повтор<select value={recurrence} onChange={e => setRecurrence(e.target.value as Recurrence)}><option value="none">Не повторять</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option></select></label></div>
+          <label className="inbox-check"><input type="checkbox" checked={isInboxTask} onChange={e => setIsInboxTask(e.target.checked)} /> <span><strong>Входящая задача</strong><small>Сохранять без закрепления в расписании и на циферблате.</small></span></label>
           <label className="field-label">Заметка <span className="optional-label">необязательно</span><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Что важно не забыть?" rows={2} maxLength={300} /></label>
+          <div className="task-ai-advice"><button type="button" className="outline-button" onClick={requestTaskInsight} disabled={taskInsightLoading || !title.trim()}>{taskInsightLoading ? "Готовлю совет…" : "✦ Получить совет AI"}</button>{taskInsightError && <p className="feature-error">{taskInsightError}</p>}{taskInsight && <div className="feature-status"><strong>{taskInsight.insight}</strong>{taskInsight.suggestions.length > 0 && <ul>{taskInsight.suggestions.map((item, index) => <li key={index}>{item}</li>)}</ul>}</div>}</div>
           <div className="modal-actions">{editing && <button type="button" className="delete-button" onClick={() => { deleteTask(editing); resetForm(); }}>Удалить</button>}<button type="button" className="outline-button" onClick={resetForm}>Отмена</button><button className="primary-button" type="submit">{editing ? "Сохранить" : "Добавить задачу"}</button></div>
         </form></section></div>}
       <div className="sr-only" aria-live="polite">{notice}</div>

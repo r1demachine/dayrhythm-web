@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import PWARegister from "./components/PWARegister";
 
 export const metadata: Metadata = {
   title: "DayRhythm — план дня",
@@ -17,7 +18,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body><PWARegister />{children}</body>
     </html>
   );
 }
