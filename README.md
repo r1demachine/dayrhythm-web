@@ -43,29 +43,29 @@
 2. Установите Git for Windows: https://git-scm.com/download/win
 3. Откройте PowerShell и проверьте:
 
-\`\`\`powershell
+```powershell
 node --version
 npm --version
 git --version
-\`\`\`
+```
 
 ## Запуск
 
-\`\`\`powershell
+```powershell
 git clone https://github.com/r1demachine/dayrhythm-web.git
 cd dayrhythm-web
 npm install
 npm run dev
-\`\`\`
+```
 
 Откройте http://localhost:3000. Остановить сервер можно клавишами Ctrl+C.
 
 ## Проверка перед изменениями и PR
 
-\`\`\`powershell
+```powershell
 npm run lint
 npm run build
-\`\`\`
+```
 
 ## Включение AI
 
@@ -80,14 +80,14 @@ AI-планировщик может обрабатывать простые ф�
 
 Пример переменных окружения:
 
-\`\`\`dotenv
+```dotenv
 GROQ_API_KEY=
 GROQ_MODEL=llama-3.3-70b-versatile
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.8-flash
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-\`\`\`
+```
 
 Не добавляйте заполненный .env.local в Git и никогда не передавайте API-ключи в браузерном коде. Gemini используется для анализа изображений: до 3 изображений на запрос, каждое меньше 4 МБ.
 
