@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import FeaturePanels, { FeatureView, ParsedWebTask } from "./feature-panels";
 
 type Category = "Работа" | "Спорт" | "Отдых" | "Быт" | "Личное";
 type Task = {
@@ -13,6 +14,7 @@ type Task = {
   done: boolean;
   note: string;
 };
+type AppView = "day" | FeatureView;
 const CATEGORIES: Category[] = ["Работа", "Спорт", "Отдых", "Быт", "Личное"];
 const COLORS: Record<Category, string> = {
   "Работа": "#6266e9",
@@ -48,6 +50,7 @@ const sectorPath = (start: number, duration: number, inner: number, outer: numbe
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [view, setView] = useState<AppView>("day");
   const [selectedDate, setSelectedDate] = useState(todayString);
   const [ready, setReady] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
