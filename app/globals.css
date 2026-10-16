@@ -81,3 +81,16 @@
 .settings-card small{display:block;margin-top:14px}
 @media(max-width:900px){.insight-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.insight-grid,.ai-layout{grid-template-columns:1fr}.timeline-event{grid-template-columns:110px minmax(100px,1fr) auto}.timeline-event-meta{grid-column:2}.timeline-event .small-action{grid-column:3;grid-row:1 / span 2}}
 @media(max-width:620px){.feature-nav{margin:0 -2px}.feature-nav-item{padding:9px 11px;font-size:12px}.feature-page{padding-top:22px}.feature-heading{align-items:flex-start;flex-direction:column}.feature-heading input[type=date]{width:100%}.timeline-summary>div{min-width:0;flex:1;padding:0 10px}.timeline-summary strong{font-size:17px}.timeline-summary span{font-size:10px}.timeline-ruler{grid-template-columns:repeat(13,minmax(0,1fr))}.timeline-hour:nth-child(even){display:none}.timeline-event{grid-template-columns:1fr auto;gap:8px}.timeline-event-title{grid-column:1}.timeline-event-meta{grid-column:1}.timeline-event .small-action{grid-column:2;grid-row:1 / span 3}.inbox-item{align-items:flex-start;flex-wrap:wrap}.inbox-item-main{flex-basis:calc(100% - 50px)}.inbox-item>.small-action{margin-left:36px}.insight-stat-grid{gap:8px}.insight-stat{padding:14px}.insight-stat strong{font-size:23px}.insight-card{padding:16px}.hourly-chart{gap:2px}.settings-grid{grid-template-columns:1fr}.insight-summary{padding:18px}.insight-ring{width:68px;height:68px;flex-basis:68px}}
+
+/* 12-hour focus dial and live drag feedback */
+.dial-window-track{fill:none;stroke:var(--line);stroke-width:1.2;opacity:.9}
+.dial-overflow-track{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:3 5;opacity:.8}
+.task-sector{stroke-linejoin:round;transition:opacity .15s,filter .15s}
+.task-sector.upcoming-sector{filter:drop-shadow(0 2px 3px rgba(0,0,0,.08))}
+.task-sector.overflow-sector{filter:saturate(.78)}
+.task-sector:hover{filter:brightness(1.08);stroke-width:3}
+.drag-time-preview{position:absolute;z-index:3;top:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100% - 24px);padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:var(--panel);box-shadow:var(--shadow);font-size:11px;white-space:nowrap;pointer-events:none}
+.drag-time-preview strong{font-family:Manrope,sans-serif;font-size:15px;font-variant-numeric:tabular-nums}
+.drag-time-preview span{color:var(--muted);font-size:10px}
+.drag-ghost{pointer-events:none}
+@media(max-width:390px){.drag-time-preview{top:7px;padding:7px 10px;font-size:10px}.drag-time-preview span{display:none}}
