@@ -85,11 +85,17 @@ const sectorPath24 = (start: number, duration: number, inner: number, outer: num
 const taskArcLabel = (task: Task, visibleDuration: number, radius: number, period: number) => {
   const arcLength = visibleDuration / period * Math.PI * 2 * radius;
   const maxChars = Math.floor(arcLength / 5.2);
-  const timeRange = `${timeText(task.start)}–${endTimeText(task.start + task.duration)}`;
+  const endMinute = task.start + task.duration;
+  const timeRange = `${timeText(task.start)}–${endTimeText(endMinute)}`;
+  const compactRange = `${pad(Math.floor(task.start / 60))}–${pad(endMinute === 1440 ? 24 : Math.floor(endMinute / 60) % 24)}`;
   const fullLabel = `${task.title} · ${timeRange}`;
   if (maxChars >= fullLabel.length) return fullLabel;
-  if (maxChars >= 9) return task.title.length > maxChars ? `${task.title.slice(0, maxChars - 1)}…` : task.title;
-  if (maxChars >= 5) return `${pad(Math.floor(task.start / 60))}–${pad(Math.floor((task.start + task.duration) / 60) % 24)}`;
+  if (maxChars >= compactRange.length + 4) {
+    const titleChars = maxChars - compactRange.length - 3;
+    const shortTitle = task.title.length > titleChars ? `${task.title.slice(0, Math.max(2, titleChars - 1))}…` : task.title;
+    return `${shortTitle} · ${compactRange}`;
+  }
+  if (maxChars >= compactRange.length) return compactRange;
   return "";
 };
 
@@ -192,9 +198,10 @@ export default function Home() {
   const updateTaskTooltip = (event: ReactMouseEvent<SVGElement>, task: Task) => {
     const rect = dialWrapRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const margin = Math.min(140, Math.max(20, rect.width / 2 - 8));
     setTaskTooltip({
       taskId: task.id,
-      x: Math.max(120, Math.min(rect.width - 120, event.clientX - rect.left)),
+      x: Math.max(margin, Math.min(rect.width - margin, event.clientX - rect.left)),
       y: Math.max(90, event.clientY - rect.top)
     });
   };
