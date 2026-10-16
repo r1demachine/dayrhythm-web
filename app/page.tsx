@@ -196,6 +196,11 @@ export default function Home() {
         </div>
       </header>
 
+      <nav className="feature-nav" aria-label="Разделы приложения">
+        {([{ id: "day", label: "Мой день" }, { id: "timeline", label: "Timeline" }, { id: "inbox", label: "Входящие" }, { id: "insights", label: "Аналитика" }, { id: "ai", label: "AI-планировщик" }, { id: "settings", label: "Настройки" }] as {id: AppView; label: string}[]).map(item => <button key={item.id} className={view === item.id ? "feature-nav-item active" : "feature-nav-item"} onClick={() => setView(item.id)}>{item.label}{item.id === "inbox" && tasks.filter(task => !task.date).length > 0 ? <span>{tasks.filter(task => !task.date).length}</span> : null}</button>)}
+      </nav>
+
+      {view === "day" && <>
       <section className="welcome-row">
         <div><div className="eyebrow">ТВОЙ ДЕНЬ · ТВОЙ РИТМ</div><h1>Время — твой главный ресурс.</h1><p className="subtitle">Собери день в цельную картину. Планируй не список дел, а своё время.</p></div>
         <button className="primary-button new-task-top" onClick={() => openNew()}><span>＋</span> Новая задача</button>
@@ -254,6 +259,23 @@ export default function Home() {
       </div>
 
       <footer className="app-footer"><span>dayrhythm.ai <span className="footer-dot">·</span> Найди свой ритм.</span><span>Твои данные остаются у тебя <span className="privacy-mark">↗</span></span></footer>
+      </>}
+
+      {view !== "day" && <FeaturePanels
+        view={view}
+        tasks={tasks}
+        selectedDate={selectedDate}
+        theme={theme}
+        onSelectDate={setSelectedDate}
+        onToggle={toggleDone}
+        onEdit={openEdit}
+        onAddInbox={addInboxTask}
+        onScheduleInbox={scheduleInboxTask}
+        onAddParsed={addParsedTask}
+        onThemeChange={setTheme}
+        onExport={exportData}
+        onImport={importData}
+      />}
 
       {showForm && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) resetForm(); }}><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="form-title"><div className="modal-head"><div><div className="eyebrow">{editing ? "НАСТРОЙКА ПЛАНА" : "НОВАЯ ЗАПИСЬ"}</div><h2 id="form-title">{editing ? "Изменить задачу" : "Добавить задачу"}</h2></div><button className="icon-button" onClick={resetForm} aria-label="Закрыть">×</button></div>
         <form onSubmit={saveTask}><label className="field-label">Название задачи<input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="Например, тренировка на станке" maxLength={100} required /></label>
