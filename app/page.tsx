@@ -185,7 +185,10 @@ export default function Home() {
     let fired: Record<string, number> = {};
     try { fired = JSON.parse(localStorage.getItem(firedKey) || "{}") as Record<string, number>; } catch { fired = {}; }
     for (const task of tasks) {
-      if (task.inbox || task.reminderMinutes == null || !taskOccursOnDate(task, currentDate)) continue;
+      const occurrenceDone = task.recurrence === "none"
+        ? task.done
+        : (task.completedDates ?? (task.done ? [task.date] : [])).includes(currentDate);
+      if (task.inbox || task.reminderMinutes == null || occurrenceDone || !taskOccursOnDate(task, currentDate)) continue;
       const reminderAt = task.start - task.reminderMinutes;
       if (reminderAt < 0 || now < reminderAt || now >= reminderAt + 1) continue;
       const id = `${currentDate}:${task.id}:${task.reminderMinutes}`;
@@ -200,7 +203,14 @@ export default function Home() {
     localStorage.setItem(firedKey, JSON.stringify(fired));
   }, [tasks, now, notificationsEnabled, ready, clockFormat]);
 
-  const dayTasks = useMemo(() => tasks.filter(t => taskOccursOnDate(t, selectedDate)).sort((a, b) => a.start - b.start), [tasks, selectedDate]);
+  const dayTasks = useMemo(() => tasks
+    .filter(task => taskOccursOnDate(task, selectedDate))
+    .map(task => {
+      if (task.recurrence === "none") return task;
+      const completedDates = task.completedDates ?? (task.done ? [task.date] : []);
+      return { ...task, date: selectedDate, done: completedDates.includes(selectedDate) };
+    })
+    .sort((a, b) => a.start - b.start), [tasks, selectedDate]);
   const shownTasks = dayTasks.filter(t => filter === "Все" || t.category === filter);
   const doneCount = dayTasks.filter(t => t.done).length;
   const plannedMinutes = dayTasks.reduce((sum, t) => sum + t.duration, 0);
@@ -246,8 +256,12 @@ export default function Home() {
     const length = Math.min(1440 - startMinutes, Math.max(5, Number(duration) || 60));
     if (!title.trim()) return;
     const updatedAt = Date.now();
+    const originalTask = editing ? tasks.find(task => task.id === editing) : undefined;
+    const taskDate = originalTask?.recurrence && recurrence !== "none" && !isInboxTask
+      ? originalTask.date
+      : selectedDate;
     const taskFields = {
-      title: title.trim(), date: selectedDate, start: startMinutes, duration: length, category,
+      title: title.trim(), date: taskDate, start: startMinutes, duration: length, category,
       note: note.trim(), emoji: emoji.trim() || CATEGORY_EMOJI[category], colorHex,
       participants: participants.split(",").map(value => value.trim()).filter(Boolean).slice(0, 30),
       reminderMinutes: reminderMinutes === "none" ? null : Number(reminderMinutes),
@@ -298,7 +312,23 @@ export default function Home() {
     }
   };
 
-  const toggleDone = (id: string) => setTasks(old => old.map(t => t.id === id ? { ...t, done: !t.done, updatedAt: Date.now() } : t));
+  const toggleDone = (id: string) => {
+    const task = tasks.find(item => item.id === id);
+    if (task?.recurrence && task.recurrence !== "none") {
+      const completedDates = task.completedDates ?? (task.done ? [task.date] : []);
+      const alreadyDone = completedDates.includes(selectedDate);
+      setTasks(old => old.map(item => item.id === id ? {
+        ...item,
+        done: false,
+        completedDates: alreadyDone
+          ? completedDates.filter(date => date !== selectedDate)
+          : [...completedDates, selectedDate],
+        updatedAt: Date.now()
+      } : item));
+      return;
+    }
+    setTasks(old => old.map(item => item.id === id ? { ...item, done: !item.done, updatedAt: Date.now() } : item));
+  };
   const deleteTask = (id: string) => {
     setDeletedAt(old => ({ ...old, [id]: Date.now() }));
     setTasks(old => old.filter(t => t.id !== id));
