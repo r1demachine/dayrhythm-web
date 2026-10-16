@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, MouseEvent as ReactMouseEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FeaturePanels, { FeatureView, ParsedWebTask } from "./feature-panels";
 
 type Category = "Работа" | "Спорт" | "Отдых" | "Быт" | "Личное";
@@ -15,6 +15,7 @@ type Task = {
   note: string;
 };
 type AppView = "day" | FeatureView;
+type DialMode = "focus12" | "circle24" | "list24";
 const CATEGORIES: Category[] = ["Работа", "Спорт", "Отдых", "Быт", "Личное"];
 const COLORS: Record<Category, string> = {
   "Работа": "#6266e9",
@@ -25,8 +26,15 @@ const COLORS: Record<Category, string> = {
 };
 const STORAGE_KEY = "dayrhythm.tasks.v1";
 const THEME_KEY = "dayrhythm.theme.v1";
+const DIAL_MODE_KEY = "dayrhythm.dial-mode.v1";
 const pad = (n: number) => String(n).padStart(2, "0");
 const timeText = (minutes: number) => `${pad(Math.floor(minutes / 60) % 24)}:${pad(minutes % 60)}`;
+const endTimeText = (minutes: number) => minutes === 1440 ? "24:00" : timeText(minutes);
+const shiftDate = (date: string, delta: number) => {
+  const value = new Date(date + "T12:00:00");
+  value.setDate(value.getDate() + delta);
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+};
 const dateText = (date: string) => new Date(date + "T12:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
 const todayString = () => {
   const d = new Date();
@@ -54,10 +62,41 @@ const sectorPath = (start: number, duration: number, inner: number, outer: numbe
   const large = visibleDuration > 360 ? 1 : 0;
   return `M ${a.x} ${a.y} A ${radius} ${radius} 0 ${large} 1 ${b.x} ${b.y}`;
 };
+const polar24 = (minutes: number, radius: number, cx = 200, cy = 200) => {
+  const angle = (minutes / 1440) * Math.PI * 2 - Math.PI / 2;
+  return {
+    x: Number((cx + Math.cos(angle) * radius).toFixed(3)),
+    y: Number((cy + Math.sin(angle) * radius).toFixed(3))
+  };
+};
+const sectorPath24 = (start: number, duration: number, inner: number, outer: number) => {
+  const radius = (inner + outer) / 2;
+  const visibleDuration = Math.max(0, Math.min(1440, duration));
+  if (visibleDuration === 0) return "";
+  const a = polar24(start, radius);
+  const b = polar24(start + visibleDuration, radius);
+  if (visibleDuration >= 1440) {
+    const opposite = polar24(start + 720, radius);
+    return `M ${a.x} ${a.y} A ${radius} ${radius} 0 0 1 ${opposite.x} ${opposite.y} A ${radius} ${radius} 0 0 1 ${a.x} ${a.y}`;
+  }
+  const large = visibleDuration > 720 ? 1 : 0;
+  return `M ${a.x} ${a.y} A ${radius} ${radius} 0 ${large} 1 ${b.x} ${b.y}`;
+};
+const taskArcLabel = (task: Task, visibleDuration: number, radius: number, period: number) => {
+  const arcLength = visibleDuration / period * Math.PI * 2 * radius;
+  const maxChars = Math.floor(arcLength / 5.2);
+  const timeRange = `${timeText(task.start)}–${endTimeText(task.start + task.duration)}`;
+  const fullLabel = `${task.title} · ${timeRange}`;
+  if (maxChars >= fullLabel.length) return fullLabel;
+  if (maxChars >= 9) return task.title.length > maxChars ? `${task.title.slice(0, maxChars - 1)}…` : task.title;
+  if (maxChars >= 5) return `${pad(Math.floor(task.start / 60))}–${pad(Math.floor((task.start + task.duration) / 60) % 24)}`;
+  return "";
+};
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [view, setView] = useState<AppView>("day");
+  const [dialMode, setDialMode] = useState<DialMode>("focus12");
   const [selectedDate, setSelectedDate] = useState(todayString);
   const [ready, setReady] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -72,6 +111,8 @@ export default function Home() {
   const [now, setNow] = useState(0);
   const [notice, setNotice] = useState("");
   const [dragPreview, setDragPreview] = useState<{ taskId: string; minute: number } | null>(null);
+  const [taskTooltip, setTaskTooltip] = useState<{ taskId: string; x: number; y: number } | null>(null);
+  const dialWrapRef = useRef<HTMLDivElement>(null);
   const dialRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<string | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -83,6 +124,8 @@ export default function Home() {
       if (saved) setTasks(JSON.parse(saved) as Task[]);
       const savedTheme = localStorage.getItem(THEME_KEY);
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
+      const savedDialMode = localStorage.getItem(DIAL_MODE_KEY);
+      if (savedDialMode === "focus12" || savedDialMode === "circle24" || savedDialMode === "list24") setDialMode(savedDialMode);
     } catch { setNotice("Не удалось прочитать сохранённые данные браузера."); }
     setReady(true);
   }, []);
@@ -94,6 +137,9 @@ export default function Home() {
     if (ready) localStorage.setItem(THEME_KEY, theme);
   }, [theme, ready]);
   useEffect(() => {
+    if (ready) localStorage.setItem(DIAL_MODE_KEY, dialMode);
+  }, [dialMode, ready]);
+  useEffect(() => {
     const update = () => {
       const d = new Date();
       setNow(d.getHours() * 60 + d.getMinutes());
@@ -104,6 +150,7 @@ export default function Home() {
   }, []);
 
   const dayTasks = useMemo(() => tasks.filter(t => t.date === selectedDate).sort((a, b) => a.start - b.start), [tasks, selectedDate]);
+  const nextDayTasks = useMemo(() => tasks.filter(t => t.date === shiftDate(selectedDate, 1)).sort((a, b) => a.start - b.start), [tasks, selectedDate]);
   const shownTasks = dayTasks.filter(t => filter === "Все" || t.category === filter);
   const doneCount = dayTasks.filter(t => t.done).length;
   const plannedMinutes = dayTasks.reduce((sum, t) => sum + t.duration, 0);
@@ -142,12 +189,24 @@ export default function Home() {
     setTasks(old => old.map(t => t.id === id ? { ...t, start: Math.min(1435, Math.max(0, Math.round(minute / 15) * 15)), duration: Math.min(t.duration, 1440 - Math.min(1435, Math.max(0, Math.round(minute / 15) * 15))) } : t));
   }, []);
   const dialAnchor = selectedDate === todayString() ? now : 540;
+  const updateTaskTooltip = (event: ReactMouseEvent<SVGElement>, task: Task) => {
+    const rect = dialWrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTaskTooltip({
+      taskId: task.id,
+      x: Math.max(120, Math.min(rect.width - 120, event.clientX - rect.left)),
+      y: Math.max(90, event.clientY - rect.top)
+    });
+  };
   const pointerMinute = (event: PointerEvent<SVGSVGElement>) => {
     if (!dialRef.current) return 0;
     const rect = dialRef.current.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 400;
     const y = ((event.clientY - rect.top) / rect.height) * 400;
     const angle = (Math.atan2(y - 200, x - 200) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
+    if (dialMode === "circle24") {
+      return Math.min(1435, Math.max(0, Math.round((angle / (Math.PI * 2) * 1440) / 15) * 15));
+    }
     const clockMinute = angle / (Math.PI * 2) * 720;
     const radius = Math.hypot(x - 200, y - 200);
     // Внутреннее кольцо выбирает 00:00–11:45, внешнее — 12:00–23:45.
