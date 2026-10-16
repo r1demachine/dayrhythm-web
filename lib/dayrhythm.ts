@@ -31,6 +31,7 @@ export interface Task {
   participants?: string[];
   reminderMinutes?: number | null;
   recurrence?: Recurrence;
+  completedDates?: string[];
   inbox?: boolean;
   updatedAt?: number;
   source?: "manual" | "ai" | "calendar";
@@ -143,6 +144,7 @@ export function normalizeTask(value: unknown, fallbackDate = todayString()): Tas
     participants: Array.isArray(item.participants) ? item.participants.map(String).filter(Boolean).slice(0, 30) : [],
     reminderMinutes: reminderValue === null || !Number.isFinite(reminderValue) ? null : Math.min(1440, Math.max(0, reminderValue)),
     recurrence: item.recurrence === "daily" || item.recurrence === "weekly" ? item.recurrence : "none",
+    completedDates: Array.isArray(item.completedDates) ? item.completedDates.map(String).filter(value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value)).slice(-3660) : undefined,
     inbox: Boolean(item.inbox),
     updatedAt: Number(item.updatedAt) || Date.now(),
     source: item.source === "ai" || item.source === "calendar" ? item.source : "manual"
