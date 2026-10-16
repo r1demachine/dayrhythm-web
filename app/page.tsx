@@ -161,7 +161,7 @@ export default function Home() {
       try {
         const parsed = JSON.parse(String(reader.result));
         if (!Array.isArray(parsed.tasks)) throw new Error("invalid");
-        const valid = parsed.tasks.every((task: Task) => task && typeof task.id === "string" && typeof task.title === "string" && typeof task.start === "number" && typeof task.duration === "number" && (task.date === "" || /^\\d{4}-\\d{2}-\\d{2}$/.test(task.date)));
+        const valid = parsed.tasks.every((task: Task) => task && typeof task.id === "string" && typeof task.title === "string" && typeof task.start === "number" && typeof task.duration === "number" && (task.date === "" || /^\d{4}-\d{2}-\d{2}$/.test(task.date)));
         if (!valid) throw new Error("invalid task schema");
         setTasks(parsed.tasks); setNotice("Резервная копия импортирована.");
       } catch { setNotice("Не удалось импортировать файл. Выберите резервную копию DayRhythm JSON."); }
