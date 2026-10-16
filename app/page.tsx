@@ -90,9 +90,9 @@ const taskArcLabel = (task: Task, visibleDuration: number, radius: number, perio
   const compactRange = `${pad(Math.floor(task.start / 60))}–${pad(endMinute === 1440 ? 24 : Math.floor(endMinute / 60) % 24)}`;
   const fullLabel = `${task.title} · ${timeRange}`;
   if (maxChars >= fullLabel.length) return fullLabel;
-  if (maxChars >= compactRange.length + 4) {
+  if (maxChars >= compactRange.length + 6) {
     const titleChars = maxChars - compactRange.length - 3;
-    const shortTitle = task.title.length > titleChars ? `${task.title.slice(0, Math.max(2, titleChars - 1))}…` : task.title;
+    const shortTitle = task.title.length > titleChars ? `${task.title.slice(0, titleChars - 1)}…` : task.title;
     return `${shortTitle} · ${compactRange}`;
   }
   if (maxChars >= compactRange.length) return compactRange;
