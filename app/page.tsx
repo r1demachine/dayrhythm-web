@@ -4,6 +4,7 @@ import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useSt
 import FeatureViews from "./components/FeatureViews";
 import { CATEGORIES, CATEGORY_EMOJI, COLORS, actualMinuteForDialMinute, addDaysToDate, dateText, makeId, normalizeTask, pad, taskDialSegments, taskOccursOnDate, timeText, todayString } from "@/lib/dayrhythm";
 import type { AppView, Category, ClockFormat, DialMode, Recurrence, Task } from "@/lib/dayrhythm";
+import { getSavedSession, saveSession, syncTasksWithCloud } from "@/lib/supabase-rest";
 import type { DeletedTaskMap } from "@/lib/supabase-rest";
 
 const STORAGE_KEY = "dayrhythm.tasks.v1";
@@ -37,6 +38,7 @@ export default function Home() {
   const [dialMode, setDialMode] = useState<DialMode>("24h");
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [deletedAt, setDeletedAt] = useState<DeletedTaskMap>({});
+  const [cloudAuthRevision, setCloudAuthRevision] = useState(0);
   const [editing, setEditing] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -57,6 +59,8 @@ export default function Home() {
   const dragRef = useRef<string | null>(null);
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const suppressSectorClickRef = useRef(false);
+  const autoSyncInFlightRef = useRef(false);
+  const lastSyncedSignatureRef = useRef("");
 
   useEffect(() => {
     try {
@@ -95,6 +99,31 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  useEffect(() => {
+    if (!ready) return;
+    const signature = JSON.stringify({ tasks, deletedAt });
+    if (signature === lastSyncedSignatureRef.current || autoSyncInFlightRef.current) return;
+    const session = getSavedSession();
+    if (!session) return;
+    const timer = window.setTimeout(async () => {
+      if (autoSyncInFlightRef.current) return;
+      autoSyncInFlightRef.current = true;
+      try {
+        const result = await syncTasksWithCloud(session, tasks, deletedAt);
+        saveSession(result.session);
+        lastSyncedSignatureRef.current = JSON.stringify({ tasks: result.tasks, deletedAt: result.deletedAt });
+        if (JSON.stringify(tasks) !== JSON.stringify(result.tasks)) setTasks(result.tasks);
+        if (JSON.stringify(deletedAt) !== JSON.stringify(result.deletedAt)) setDeletedAt(result.deletedAt);
+      } catch {
+        // Keep local edits; retry on the next data/auth change or from Settings.
+        lastSyncedSignatureRef.current = signature;
+        setNotice("Не удалось синхронизировать данные с облаком. Проверь подключение в настройках.");
+      } finally {
+        autoSyncInFlightRef.current = false;
+      }
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [tasks, deletedAt, ready, cloudAuthRevision]);
   useEffect(() => {
     const update = () => {
       const d = new Date();
@@ -345,6 +374,7 @@ export default function Home() {
           setNotificationsEnabled={setNotificationsEnabled}
           deletedAt={deletedAt}
           setDeletedAt={setDeletedAt}
+          onCloudSessionChanged={() => setCloudAuthRevision(value => value + 1)}
           onOpenDay={(date) => { setSelectedDate(date); setActiveView("schedule"); }}
           onCreateTask={(date, inbox = false) => { if (date) setSelectedDate(date); openNew(undefined, inbox); setActiveView("schedule"); }}
           onEditTask={(task) => { openEdit(task); setActiveView("schedule"); }}
