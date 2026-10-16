@@ -149,8 +149,10 @@ export default function Home() {
     const y = ((event.clientY - rect.top) / rect.height) * 400;
     const angle = (Math.atan2(y - 200, x - 200) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
     const clockMinute = angle / (Math.PI * 2) * 720;
-    const delta = (clockMinute - (dialAnchor % 720) + 720) % 720;
-    return Math.min(1435, Math.max(0, Math.round((dialAnchor + delta) / 15) * 15));
+    const radius = Math.hypot(x - 200, y - 200);
+    // Внутреннее кольцо выбирает 00:00–11:45, внешнее — 12:00–23:45.
+    const halfDayStart = radius < 117 ? 0 : 720;
+    return Math.min(1435, Math.max(0, Math.round((halfDayStart + clockMinute) / 15) * 15));
   };
   const onDialPointerMove = (event: PointerEvent<SVGSVGElement>) => {
     if (!dragRef.current || !dragOriginRef.current) return;
