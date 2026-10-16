@@ -27,6 +27,7 @@ type Props = {
   setNotificationsEnabled: (value: boolean) => void;
   deletedAt: DeletedTaskMap;
   setDeletedAt: Dispatch<SetStateAction<DeletedTaskMap>>;
+  onCloudSessionChanged: () => void;
   onOpenDay: (date: string) => void;
   onCreateTask: (date?: string, inbox?: boolean) => void;
   onEditTask: (task: Task) => void;
@@ -470,10 +471,11 @@ function SettingsView(props: Props) {
     try {
       if (authMode === "login") {
         const value = await signInWithPassword(email.trim(), password);
-        setSession(value); setAuthMessage("Вход выполнен. Теперь можно синхронизировать расписание.");
+        setSession(value); props.onCloudSessionChanged(); setAuthMessage("Вход выполнен. Облачная синхронизация будет выполняться автоматически.");
       } else {
         const value = await signUpWithPassword(email.trim(), password);
         if (value.session) setSession(value.session);
+        props.onCloudSessionChanged();
         setAuthMessage(value.message);
       }
     } catch (error) { setAuthError(error instanceof Error ? error.message : "Не удалось выполнить запрос авторизации."); }
@@ -549,7 +551,7 @@ function SettingsView(props: Props) {
       </section>
       <section className="panel feature-panel settings-section cloud-section"><div className="panel-heading"><div><div className="eyebrow">ОБЛАКО · НЕОБЯЗАТЕЛЬНО</div><h2>Аккаунт и синхронизация</h2></div><span className={session ? "mini-status" : "mini-status muted"}>{session ? "Вход выполнен" : "Не подключено"}</span></div>
         {!supabaseConfigured ? <><p className="settings-description">Чтобы включить аккаунт и синхронизацию между устройствами, создай проект Supabase, добавь URL и anon/publishable key в .env.local, затем выполни SQL из <code>supabase/schema.sql</code>. Service Role Key не нужен и не должен попадать в браузер.</p><div className="feature-status">Облачные функции отключены: Supabase не настроен.</div></> :
-          session ? <><p className="settings-description">Аккаунт: {session.user.email ?? session.user.id}. Ручная синхронизация объединяет записи по ID и времени последнего изменения.</p><div className="settings-actions"><button className="primary-button" onClick={syncNow} disabled={syncLoading}>{syncLoading ? "Синхронизирую…" : "Синхронизировать сейчас"}</button><button className="outline-button" onClick={async () => { await signOut(); setSession(null); setAuthMessage("Ты вышел из аккаунта."); }}>Выйти</button></div></> :
+          session ? <><p className="settings-description">Аккаунт: {session.user.email ?? session.user.id}. Ручная синхронизация объединяет записи по ID и времени последнего изменения.</p><div className="settings-actions"><button className="primary-button" onClick={syncNow} disabled={syncLoading}>{syncLoading ? "Синхронизирую…" : "Синхронизировать сейчас"}</button><button className="outline-button" onClick={async () => { await signOut(); setSession(null); props.onCloudSessionChanged(); setAuthMessage("Ты вышел из аккаунта."); }}>Выйти</button></div></> :
           <><div className="segmented-control"><button className={authMode === "login" ? "active" : ""} onClick={() => { setAuthMode("login"); setAuthError(""); setAuthMessage(""); }}>Вход</button><button className={authMode === "signup" ? "active" : ""} onClick={() => { setAuthMode("signup"); setAuthError(""); setAuthMessage(""); }}>Регистрация</button></div><label className="field-label">Email<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label><label className="field-label">Пароль<input type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} value={password} onChange={event => setPassword(event.target.value)} minLength={6} /></label><button className="primary-button" onClick={handleAuth} disabled={authLoading || !email.includes("@") || password.length < 6}>{authLoading ? "Отправляю…" : authMode === "login" ? "Войти в аккаунт" : "Создать аккаунт"}</button></>}
         {authError && <div className="feature-error" role="alert">{authError}</div>}{authMessage && <div className="feature-status">{authMessage}</div>}
       </section>
