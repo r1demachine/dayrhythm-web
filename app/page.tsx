@@ -42,10 +42,17 @@ const polar = (minutes: number, radius: number, cx = 200, cy = 200) => {
   };
 };
 const sectorPath = (start: number, duration: number, inner: number, outer: number) => {
-  const a = polar(start, outer), b = polar(start + duration, outer);
-  const c = polar(start + duration, inner), d = polar(start, inner);
-  const large = duration > 360 ? 1 : 0;
-  return `M ${a.x} ${a.y} A ${outer} ${outer} 0 ${large} 1 ${b.x} ${b.y} L ${c.x} ${c.y} A ${inner} ${inner} 0 ${large} 0 ${d.x} ${d.y} Z`;
+  const radius = (inner + outer) / 2;
+  const a = polar(start, radius);
+  const b = polar(start + duration, radius);
+  const visibleDuration = Math.max(0, Math.min(720, duration));
+  if (visibleDuration === 0) return "";
+  if (visibleDuration >= 720) {
+    const opposite = polar(start + 360, radius);
+    return `M ${a.x} ${a.y} A ${radius} ${radius} 0 0 1 ${opposite.x} ${opposite.y} A ${radius} ${radius} 0 0 1 ${a.x} ${a.y}`;
+  }
+  const large = visibleDuration > 360 ? 1 : 0;
+  return `M ${a.x} ${a.y} A ${radius} ${radius} 0 ${large} 1 ${b.x} ${b.y}`;
 };
 
 export default function Home() {
@@ -263,12 +270,12 @@ export default function Home() {
                 const duration = upcoming ? Math.min(end - Math.max(task.start, dialAnchor), 720 - offset) : Math.min(task.duration, 720);
                 const inner = upcoming ? 111 : 68;
                 const outer = upcoming ? 139 : 91;
-                return <path key={task.id} d={sectorPath(offset, duration, inner, outer)} fill={COLORS[task.category]} opacity={task.done ? .25 : upcoming ? .92 : .48} stroke="var(--panel)" strokeWidth="2" strokeLinejoin="round" className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />;
+                return <path key={task.id} d={sectorPath(offset, duration, inner, outer)} fill="none" stroke={COLORS[task.category]} strokeWidth={outer - inner} strokeLinecap="round" opacity={task.done ? .25 : upcoming ? .92 : .48} className={upcoming ? "task-sector upcoming-sector" : "task-sector overflow-sector"} onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; dialRef.current?.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />;
               })}
               {dragPreview && (() => {
                 const task = dayTasks.find(item => item.id === dragPreview.taskId);
                 const offset = dragPreview.minute % 720;
-                return task ? <path d={sectorPath(offset, Math.min(task.duration, 720 - offset), 108, 142)} fill={COLORS[task.category]} opacity=".5" stroke="var(--text)" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none" /> : null;
+                return task ? <path d={sectorPath(offset, Math.min(task.duration, 720 - offset), 108, 142)} fill="none" stroke={COLORS[task.category]} strokeWidth="34" strokeLinecap="round" opacity=".65" strokeDasharray="6 5" pointerEvents="none" /> : null;
               })()}
               <circle cx="200" cy="200" r="55" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="183" className="center-overline">{selectedDate === todayString() ? "СЕЙЧАС" : "НАЧАЛО ОКНА"}</text>
