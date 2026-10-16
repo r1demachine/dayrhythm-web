@@ -247,6 +247,8 @@ export default function Home() {
             <svg ref={dialRef} className="dial" viewBox="0 0 400 400" role="img" aria-label="Круговой циферблат суток" onPointerMove={onDialPointerMove} onPointerUp={onDialPointerUp} onPointerCancel={onDialPointerCancel}>
               <defs><filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter></defs>
               <circle cx="200" cy="200" r="166" className="dial-track" />
+              <circle cx="200" cy="200" r="125" className="dial-window-track" />
+              <circle cx="200" cy="200" r="80" className="dial-overflow-track" />
               {Array.from({ length: 12 }, (_, hour) => {
                 const minute = hour * 60;
                 const hourLabel = hour === 0 ? "12" : pad(hour);
