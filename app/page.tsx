@@ -23,7 +23,6 @@ const COLORS: Record<Category, string> = {
 };
 const STORAGE_KEY = "dayrhythm.tasks.v1";
 const THEME_KEY = "dayrhythm.theme.v1";
-const HOUR = 60;
 const pad = (n: number) => String(n).padStart(2, "0");
 const timeText = (minutes: number) => `${pad(Math.floor(minutes / 60) % 24)}:${pad(minutes % 60)}`;
 const dateText = (date: string) => new Date(date + "T12:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
@@ -202,7 +201,7 @@ export default function Home() {
                 const b = polar(hour * 60, hour % 6 === 0 ? 158 : 162);
                 return <g key={hour}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hour % 6 === 0 ? "major-tick" : "minor-tick"} />{hour % 3 === 0 && <text x={polar(hour * 60, 145).x} y={polar(hour * 60, 145).y} className="hour-label">{pad(hour)}</text>}</g>;
               })}
-              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
+              {dayTasks.map(task => <path key={task.id} d={sectorPath(task.start, task.duration, 93, 127)} fill={COLORS[task.category]} opacity={task.done ? .28 : .9} stroke="var(--panel)" strokeWidth="2" className="task-sector" onPointerDown={(event) => { suppressSectorClickRef.current = false; dragRef.current = task.id; dragOriginRef.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => { if (suppressSectorClickRef.current) { suppressSectorClickRef.current = false; return; } openEdit(task); }} tabIndex={0} role="button" aria-label={`${task.title}, ${timeText(task.start)}`} />)}
               <circle cx="200" cy="200" r="88" className="dial-inner" filter="url(#softShadow)" />
               <text x="200" y="178" className="center-overline">ТВОЁ ВРЕМЯ</text>
               <text x="200" y="216" className="center-time">{timeText(now)}</text>
