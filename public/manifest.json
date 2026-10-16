@@ -1,0 +1,10 @@
+{
+  "name": "DayRhythm — планировщик дня",
+  "short_name": "DayRhythm",
+  "description": "Планирование дня на 24-часовом циферблате",
+  "lang": "ru",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f2ed",
+  "theme_color": "#f4f2ed"
+}
