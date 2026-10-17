@@ -6,7 +6,7 @@ export const DIAL_CONFIG = {
   cy: 210,
   viewSize: 420,
 
-  // Основное кольцо ближайших 12 часов.
+  // Полный оборот шкалы — 12 часов; основной радиус сохраняется до +8 часов.
   R0: 128,
   W0: 11,
 
@@ -180,6 +180,7 @@ export function ribbonSamples(task: RibbonTask, nowMin: number): RibbonSample[] 
     startDelta,
     endDelta,
     0,
+    720,
     DIAL_CONFIG.futureMainHours * 60,
     (DIAL_CONFIG.futureMainHours + DIAL_CONFIG.transitionHours) * 60,
   ].filter((value) => value >= visibleStart && value <= visibleEnd);
