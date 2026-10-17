@@ -507,15 +507,16 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
               <path id={"vortex-center-" + event.key} d={event.centerPath} fill="none" stroke="none" />
               <path id={"vortex-label-" + event.key} d={event.labelPath} fill="none" stroke="none" />
 
-              {event.current && (
+              {event.current && event.segments.map((segment) => (
                 <path
-                  d={ribbonPath(event.samples)}
+                  key={"glow-" + segment.key}
+                  d={segment.path}
                   fill={event.color}
-                  opacity={0.42}
+                  fillOpacity={segment.opacity * 0.18}
                   filter="url(#vortex-current-glow)"
                   pointerEvents="none"
                 />
-              )}
+              ))}
 
               {event.segments.map((segment) => (
                 <path
