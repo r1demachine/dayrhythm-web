@@ -181,7 +181,7 @@ export default function Home() {
     event.preventDefault();
     const [h, m] = start.split(":").map(Number);
     const startMinutes = h * 60 + m;
-    const length = Math.min(1440 - startMinutes, Math.max(5, Number(duration) || 60));
+    const length = Math.min(1439, Math.max(5, Number(duration) || 60));
     if (!title.trim()) return;
     if (editing) {
       setTasks(old => old.map(t => t.id === editing ? { ...t, title: title.trim(), date: selectedDate, start: startMinutes, duration: length, category, note: note.trim() } : t));
@@ -193,7 +193,7 @@ export default function Home() {
   const toggleDone = (id: string) => setTasks(old => old.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const deleteTask = (id: string) => setTasks(old => old.filter(t => t.id !== id));
   const moveTask = useCallback((id: string, minute: number) => {
-    setTasks(old => old.map(t => t.id === id ? { ...t, start: Math.min(1435, Math.max(0, Math.round(minute / 15) * 15)), duration: Math.min(t.duration, 1440 - Math.min(1435, Math.max(0, Math.round(minute / 15) * 15))) } : t));
+    setTasks(old => old.map(t => t.id === id ? { ...t, start: Math.min(1435, Math.max(0, Math.round(minute / 15) * 15)) } : t));
   }, []);
   const dialAnchor = selectedDate === todayString() ? now : 540;
   const updateTaskTooltip = (event: ReactMouseEvent<SVGElement>, task: Task) => {
@@ -521,7 +521,7 @@ export default function Home() {
 
       {showForm && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) resetForm(); }}><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="form-title"><div className="modal-head"><div><div className="eyebrow">{editing ? "НАСТРОЙКА ПЛАНА" : "НОВАЯ ЗАПИСЬ"}</div><h2 id="form-title">{editing ? "Изменить задачу" : "Добавить задачу"}</h2></div><button className="icon-button" onClick={resetForm} aria-label="Закрыть">×</button></div>
         <form onSubmit={saveTask}><label className="field-label">Название задачи<input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="Например, тренировка на станке" maxLength={100} required /></label>
-          <div className="field-grid"><label className="field-label">Начало<input type="time" value={start} onChange={e => setStart(e.target.value)} required /></label><label className="field-label">Длительность<select value={duration} onChange={e => setDuration(e.target.value)}>{[5,15,30,45,60,75,90,120,150,180,240,300,360,480,600,720].map(n => <option value={n} key={n}>{n < 60 ? `${n} минут` : `${Math.floor(n / 60)} ч${n % 60 ? ` ${n % 60} мин` : ""}`}</option>)}</select></label></div>
+          <div className="field-grid"><label className="field-label">Начало<input type="time" value={start} onChange={e => setStart(e.target.value)} required /></label><label className="field-label">Длительность<select value={duration} onChange={e => setDuration(e.target.value)}>{[5,15,30,45,60,75,90,120,150,180,240,300,360,480,600,720,840,900,960,1080,1200,1320,1380,1439].map(n => <option value={n} key={n}>{n < 60 ? `${n} минут` : `${Math.floor(n / 60)} ч${n % 60 ? ` ${n % 60} мин` : ""}`}</option>)}</select></label></div>
           <label className="field-label">Категория<div className="category-picker">{CATEGORIES.map(cat => <button type="button" key={cat} onClick={() => setCategory(cat)} className={category === cat ? "category-option active" : "category-option"}><i style={{ background: COLORS[cat] }} />{cat}</button>)}</div></label>
           <label className="field-label">Заметка <span className="optional-label">необязательно</span><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Что важно не забыть?" rows={2} maxLength={300} /></label>
           <div className="modal-actions">{editing && <button type="button" className="delete-button" onClick={() => { deleteTask(editing); resetForm(); }}>Удалить</button>}<button type="button" className="outline-button" onClick={resetForm}>Отмена</button><button className="primary-button" type="submit">{editing ? "Сохранить" : "Добавить задачу"}</button></div>
