@@ -185,6 +185,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
   const movedRef = useRef(false);
   const suppressClickRef = useRef(false);
   const demoLoadedRef = useRef(false);
+  const devTimeOverrideRef = useRef(false);
 
   // ?now=09:00 — только для локальной разработки и быстрой визуальной проверки.
   useEffect(() => {
@@ -196,6 +197,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
     if (hour > 24 || (hour === 24 && minute !== 0)) return;
     const value = hour * 60 + minute;
     const initial = value === 1440 ? 0 : value;
+    devTimeOverrideRef.current = true;
     setSimulationMinute(initial);
     setSimulation(true);
   }, []);
@@ -235,7 +237,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
   }, [simulation]);
 
   useEffect(() => {
-    if (!simulation) setSimulationMinute(Math.max(0, Math.min(1439, now)));
+    if (!simulation && !devTimeOverrideRef.current) setSimulationMinute(Math.max(0, Math.min(1439, now)));
   }, [now, simulation]);
 
   const effectiveNow = simulation ? simulationMinute : liveMinute;
