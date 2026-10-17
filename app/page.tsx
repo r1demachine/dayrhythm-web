@@ -2,7 +2,7 @@
 
 import { FormEvent, MouseEvent as ReactMouseEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FeaturePanels, { FeatureView, ParsedWebTask } from "./feature-panels";
-import VortexDial, { VortexTaskDraft } from "./vortex-dial";
+import VortexDial, { type VortexTaskDraft } from "./vortex-dial";
 
 type Category = "Работа" | "Спорт" | "Отдых" | "Быт" | "Личное";
 type Task = {
