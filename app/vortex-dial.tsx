@@ -7,7 +7,6 @@ import {
   ribbonCenterPath,
   ribbonPath,
   ribbonPointAt,
-  ribbonPointOnEdge,
   ribbonProfile,
   ribbonSamples,
   ribbonSegments,
@@ -357,7 +356,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
     return Math.max(0, Math.min(1435, Math.round((halfDay + angle / (Math.PI * 2) * 720) / 15) * 15));
   };
 
-  const onEventPointerDown = (event: ReactPointerEvent<SVGSVGElement>, geometry: EventGeometry) => {
+  const onEventPointerDown = (event: ReactPointerEvent<SVGElement>, geometry: EventGeometry) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
     dragRef.current = {
       taskId: geometry.task.id,
