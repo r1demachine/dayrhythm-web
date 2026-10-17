@@ -51,6 +51,8 @@ type EventGeometry = {
   startDelta: number;
   endDelta: number;
   current: boolean;
+  hideStartCap: boolean;
+  hideEndCap: boolean;
   status: string;
   samples: RibbonSample[];
   segments: ReturnType<typeof ribbonSegments>;
@@ -140,7 +142,7 @@ function buildLabel(task: VortexTask, samples: RibbonSample[]) {
 }
 
 function samplesForCurrentRing(samples: RibbonSample[]) {
-  return samples.filter((sample) => sample.deltaMinutes >= 0 && sample.deltaMinutes <= 720);
+  return samples.filter((sample) => sample.deltaMinutes >= 0 && sample.deltaMinutes <= DIAL_CONFIG.futureMainHours * 60);
 }
 
 function taskStatus(startDelta: number, endDelta: number, current: boolean) {
@@ -289,11 +291,15 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
       const centerPath = ribbonCenterPath(samples);
       const ringSamples = samplesForCurrentRing(samples);
       const labelPath = ribbonCenterPath(ringSamples);
+      const hideStartCap = Math.abs(samples[0].deltaMinutes - event.startDelta) < 0.01 && withLanes.some((other) => other.key !== event.key && other.lane === event.lane && Math.abs(other.endDelta - event.startDelta) < 0.01);
+      const hideEndCap = Math.abs(samples[samples.length - 1].deltaMinutes - event.endDelta) < 0.01 && withLanes.some((other) => other.key !== event.key && other.lane === event.lane && Math.abs(other.startDelta - event.endDelta) < 0.01);
       const middle = ribbonProfile(360, { lane: event.lane, current: event.current, done: event.task.done, duration: event.task.duration });
       const label = middle.w * 2 >= 14 ? buildLabel(event.task, ringSamples) : "";
       const color = taskColor(event.task);
       return [{
         ...event,
+        hideStartCap,
+        hideEndCap,
         samples,
         segments,
         centerPath,
@@ -472,7 +478,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
           className="vortex-dial"
           viewBox={`0 0 ${DIAL_CONFIG.viewSize} ${DIAL_CONFIG.viewSize}`}
           role="img"
-          aria-label="Водоворот дел: прошлое сжимается к центру, ближайшие 12 часов выделены толстой лентой"
+          aria-label="Водоворот дел: прошлое сжимается к центру, ближайшие 8 часов выделены толстой лентой"
           onPointerMove={onDialPointerMove}
           onPointerUp={onDialPointerUp}
           onPointerCancel={onDialPointerCancel}
@@ -566,8 +572,8 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
                 const startProgress = 0;
                 const endProgress = 1;
                 return <>
-                  <circle cx={startPoint.x} cy={startPoint.y} r={first.w} fill={colorForSegment(event.color, startProgress, event.task.done)} fillOpacity={first.a} className="vortex-ribbon-cap" pointerEvents="none" />
-                  <circle cx={endPoint.x} cy={endPoint.y} r={last.w} fill={colorForSegment(event.color, endProgress, event.task.done)} fillOpacity={last.a} className="vortex-ribbon-cap" pointerEvents="none" />
+                  {!event.hideStartCap && <circle cx={startPoint.x} cy={startPoint.y} r={first.w} fill={colorForSegment(event.color, startProgress, event.task.done)} fillOpacity={first.a} className="vortex-ribbon-cap" pointerEvents="none" />}
+                  {!event.hideEndCap && <circle cx={endPoint.x} cy={endPoint.y} r={last.w} fill={colorForSegment(event.color, endProgress, event.task.done)} fillOpacity={last.a} className="vortex-ribbon-cap" pointerEvents="none" />}
                 </>;
               })()}
 
