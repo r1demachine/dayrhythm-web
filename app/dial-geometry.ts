@@ -77,7 +77,11 @@ function baseProfile(deltaMinutes: number, taskStartDelta?: number) {
   const transition = DIAL_CONFIG.transitionHours * 60;
   const farLimit = DIAL_CONFIG.horizonHours * 60;
 
-  if (deltaMinutes > 720 && taskStartDelta !== undefined && taskStartDelta >= 720) {\n    return { r: DIAL_CONFIG.R_out, w: DIAL_CONFIG.w_min, a: DIAL_CONFIG.farOpacity };\n  }\n\n  if (deltaMinutes < 0) {
+  if (deltaMinutes > 720 && taskStartDelta !== undefined && taskStartDelta >= 720) {
+    return { r: DIAL_CONFIG.R_out, w: DIAL_CONFIG.w_min, a: DIAL_CONFIG.farOpacity };
+  }
+
+  if (deltaMinutes < 0) {
     const t = clamp01(-deltaMinutes / pastLimit);
     // 1 - (1 - t)^p даёт сильное сжатие сразу за отметкой «сейчас».
     const compression = 1 - Math.pow(1 - t, DIAL_CONFIG.pastEasePower);
@@ -192,6 +196,7 @@ export function ribbonSamples(task: RibbonTask, nowMin: number): RibbonSample[] 
     done: task.done,
     lane: task.lane,
     duration: task.duration,
+    startDelta,
   };
 
   return Array.from(minutes)
