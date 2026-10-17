@@ -40,6 +40,7 @@ type Props = {
   now: number;
   onAddTask: (task: VortexTaskDraft) => void;
   onMoveTask?: (taskId: string, minute: number) => void;
+  isReady?: boolean;
 };
 
 type Point = { x: number; y: number };
@@ -148,12 +149,24 @@ function taskStatus(startDelta: number, endDelta: number, current: boolean) {
   return "Завершилось " + fmtDuration(-endDelta) + " назад";
 }
 
+function buildDemoTasks(selectedDate: string): VortexTaskDraft[] {
+  const prevDate = shiftDate(selectedDate, -1);
+  return [
+    { date: selectedDate, title: "Утренний фокус", start: 8 * 60, duration: 150, color: CATEGORY_COLORS.Работа, note: "Дело уже идёт: прошлая часть должна сужаться к центру." },
+    { date: selectedDate, title: "Короткая встреча", start: 8 * 60 + 45, duration: 90, color: CATEGORY_COLORS.Спорт, note: "Перекрывается с утренним фокусом — проверка дорожек." },
+    { date: selectedDate, title: "Рабочий блок", start: 14 * 60, duration: 120, color: CATEGORY_COLORS.Работа, note: "Обычная дуга внутри ближайших 12 часов." },
+    { date: selectedDate, title: "Вечерняя прогулка", start: 20 * 60, duration: 120, color: CATEGORY_COLORS.Отдых, note: "Переходит на тонкую внешнюю ленту." },
+    { date: selectedDate, title: "Дело через полночь", start: 23 * 60, duration: 180, color: CATEGORY_COLORS.Быт, note: "Окончание в 02:00 следующего дня." },
+    { date: prevDate, title: "Ночная смена", start: 23 * 60, duration: 360, color: CATEGORY_COLORS.Личное, note: "Перекрывает полночь и активно до 05:00." },
+  ];
+}
+
 function wallClockMinute() {
   const date = new Date();
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60 + date.getMilliseconds() / 60000;
 }
 
-export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMoveTask }: Props) {
+export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMoveTask, isReady = true }: Props) {
   const [simulation, setSimulation] = useState(false);
   const [simulationMinute, setSimulationMinute] = useState(Math.max(0, Math.min(1439, now)));
   const [liveMinute, setLiveMinute] = useState(now);
@@ -171,6 +184,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
   const dragRef = useRef<{ taskId: string; dayOffset: number; startX: number; startY: number } | null>(null);
   const movedRef = useRef(false);
   const suppressClickRef = useRef(false);
+  const demoLoadedRef = useRef(false);
 
   // ?now=09:00 — только для локальной разработки и быстрой визуальной проверки.
   useEffect(() => {
@@ -228,6 +242,15 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
   const prevDate = useMemo(() => shiftDate(selectedDate, -1), [selectedDate]);
   const nextDate = useMemo(() => shiftDate(selectedDate, 1), [selectedDate]);
   const taskDates = useMemo(() => new Map<string, number>([[prevDate, -1], [selectedDate, 0], [nextDate, 1]]), [prevDate, selectedDate, nextDate]);
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development" || !isReady || demoLoadedRef.current) return;
+    if (new URLSearchParams(window.location.search).get("demo") !== "1") return;
+    demoLoadedRef.current = true;
+    const demo = buildDemoTasks(selectedDate);
+    demo.filter((item) => !tasks.some((task) => task.date === item.date && task.title === item.title && task.start === item.start && task.duration === item.duration))
+      .forEach(onAddTask);
+  }, [isReady, selectedDate, tasks, onAddTask]);
+
 
   const events = useMemo<EventGeometry[]>(() => {
     const prepared = tasks.flatMap((task) => {
@@ -333,16 +356,9 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
   };
 
   const addDemoTasks = () => {
-    const demo = [
-      { date: selectedDate, title: "Утренний фокус", start: 8 * 60, duration: 150, color: CATEGORY_COLORS.Работа, note: "Дело уже идёт: прошлая часть должна сужаться к центру." },
-      { date: selectedDate, title: "Короткая встреча", start: 8 * 60 + 45, duration: 90, color: CATEGORY_COLORS.Спорт, note: "Перекрывается с утренним фокусом — проверка дорожек." },
-      { date: selectedDate, title: "Рабочий блок", start: 14 * 60, duration: 120, color: CATEGORY_COLORS.Работа, note: "Обычная дуга внутри ближайших 12 часов." },
-      { date: selectedDate, title: "Вечерняя прогулка", start: 20 * 60, duration: 120, color: CATEGORY_COLORS.Отдых, note: "Переходит на тонкую внешнюю ленту." },
-      { date: selectedDate, title: "Дело через полночь", start: 23 * 60, duration: 180, color: CATEGORY_COLORS.Быт, note: "Окончание в 02:00 следующего дня." },
-      { date: prevDate, title: "Ночная смена", start: 23 * 60, duration: 360, color: CATEGORY_COLORS.Личное, note: "Перекрывает полночь и активно до 05:00." },
-    ];
+    const demo = buildDemoTasks(selectedDate);
     demo.filter((item) => !tasks.some((task) => task.date === item.date && task.title === item.title && task.start === item.start && task.duration === item.duration))
-      .forEach((item) => onAddTask({ date: item.date, title: item.title, start: item.start, duration: item.duration, color: item.color, note: item.note }));
+      .forEach(onAddTask);
   };
 
   const pointerMinute = (event: ReactPointerEvent<SVGSVGElement>, taskStart: number) => {
