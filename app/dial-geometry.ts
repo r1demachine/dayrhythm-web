@@ -32,6 +32,7 @@ export const DIAL_CONFIG = {
 
   // Разводим пересекающиеся задачи по соседним дорожкам.
   laneGap: 3,
+  selfTurnGap: 22,
   maxLanes: 4,
   currentWidthScale: 1.15,
 } as const;
@@ -132,9 +133,9 @@ export function ribbonProfile(deltaMinutes: number, options: ProfileOptions = {}
   // прошедшая — внутрь. Основной профиль при этом остаётся непрерывным.
   const longTaskOffset = (options.duration ?? 0) > 720
     ? deltaMinutes < 0
-      ? -5 * smoothstep(-deltaMinutes / (DIAL_CONFIG.pastFadeHours * 60))
+      ? -DIAL_CONFIG.selfTurnGap * smoothstep(-deltaMinutes / (DIAL_CONFIG.pastCompressionHours * 60))
       : deltaMinutes > 720
-        ? 5 * smoothstep((deltaMinutes - 720) / (DIAL_CONFIG.transitionHours * 60))
+        ? DIAL_CONFIG.selfTurnGap * smoothstep((deltaMinutes - 720) / (DIAL_CONFIG.transitionHours * 60))
         : 0
     : 0;
 
