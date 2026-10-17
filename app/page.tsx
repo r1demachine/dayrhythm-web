@@ -134,6 +134,10 @@ export default function Home() {
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
       const savedDialMode = localStorage.getItem(DIAL_MODE_KEY);
       if (savedDialMode === "focus12" || savedDialMode === "circle24" || savedDialMode === "list24" || savedDialMode === "vortex") setDialMode(savedDialMode);
+      if (process.env.NODE_ENV === "development") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has("now") || params.get("demo") === "1") setDialMode("vortex");
+      }
     } catch { setNotice("Не удалось прочитать сохранённые данные браузера."); }
     setReady(true);
   }, []);
