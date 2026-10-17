@@ -48,7 +48,7 @@ export const CONFIG = {
   sample_minutes: 2,
   minimum_arc_minutes: 10,
   // Расстояние между пересекающимися делами и витками длинных задач.
-  lane_gap: 4.5,
+  lane_gap: 2,
   self_turn_gap: 17,
   colors: {
     work: "#6266e9",
@@ -145,8 +145,12 @@ function shapeAt(delta: number, lane: number, taskDuration: number) {
     }
   }
 
-  radius += Math.min(lane, 4) * CONFIG.lane_gap;
   if (delta >= 720 + CONFIG.tau_minutes) width = CONFIG.w_far;
+  const safeLane = Math.min(lane, 4);
+  if (safeLane > 0) {
+    const distance = Math.ceil(safeLane / 2) * (width * 2 + CONFIG.lane_gap);
+    radius += safeLane % 2 === 1 ? -distance : distance;
+  }
   return { radius, width };
 }
 
@@ -291,7 +295,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
       return {
         ...event,
         ...ribbon,
-        label: labelFor(event.task, event.task.duration, duration),
+        label: event.visibleStart < 720 && event.visibleEnd > 0 ? labelFor(event.task, event.task.duration, duration) : "",
         color: taskColor(event.task),
         current,
         status
