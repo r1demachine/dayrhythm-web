@@ -15,6 +15,7 @@ export type VortexTask = {
 };
 
 export type VortexTaskDraft = {
+  date?: string;
   title: string;
   start: number;
   duration: number;
@@ -336,7 +337,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
       { date: selectedDate, title: "Ночной блок", start: 2 * 60, duration: 120, color: CONFIG.colors.personal, note: "Демо для симуляции 03:00." },
       { date: nextDate, title: "Ночной блок", start: 2 * 60, duration: 120, color: CONFIG.colors.personal, note: "Повтор на следующую ночь для теста горизонта 18 часов." }
     ];
-    demo.forEach(item => onAddTask({ title: item.title, start: item.start, duration: item.duration, color: item.color, note: item.note }));
+    demo.forEach(item => onAddTask({ date: item.date, title: item.title, start: item.start, duration: item.duration, color: item.color, note: item.note }));
   };
 
   const circleMarks = [0, 180, 360, 540].map((minute, index) => {
@@ -382,7 +383,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
           </g>)}
           {events.map(event => <g key={event.key} className="vortex-event" role="button" tabIndex={0} aria-label={event.task.title + ", " + clockText(event.task.start) + "–" + clockText(wrapMinute(event.task.start + event.task.duration))}>
             <path id={"vortex-center-" + event.key} d={event.centerPath} fill="none" stroke="none" />
-            <path d={event.path} fill={event.color} opacity={event.task.done ? .28 : event.current ? .98 : event.endDelta <= 0 ? .48 : event.startDelta >= 720 + CONFIG.tau_minutes ? .45 : .88} className="vortex-ribbon" onPointerEnter={() => setHoveredTask(event.key)} onMouseEnter={() => setHoveredTask(event.key)} onMouseLeave={() => setHoveredTask(null)} onClick={() => setHoveredTask(hoveredTask === event.key ? null : event.key)} />
+            <path d={event.path} fill={event.color} opacity={event.task.done ? .28 : event.current ? .98 : event.endDelta <= 0 ? .48 : event.startDelta >= 720 + CONFIG.tau_minutes ? .45 : .88} className="vortex-ribbon" onMouseEnter={() => setHoveredTask(event.key)} onMouseLeave={() => setHoveredTask(null)} onClick={() => setHoveredTask(event.key)} />
             <circle cx={event.startCap.x} cy={event.startCap.y} r={event.startWidth} fill={event.color} opacity={event.task.done ? .28 : event.current ? .98 : .86} className="vortex-cap" pointerEvents="none" />
             <circle cx={event.endCap.x} cy={event.endCap.y} r={event.endWidth} fill={event.color} opacity={event.task.done ? .28 : event.current ? .98 : .86} className="vortex-cap" pointerEvents="none" />
             {event.label && <text className="vortex-label"><textPath href={"#vortex-center-" + event.key} startOffset={event.labelOffset + "%"} textAnchor="middle">{event.label}</textPath></text>}
