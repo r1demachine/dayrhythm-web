@@ -13,16 +13,18 @@ export const DIAL_CONFIG = {
   // Прошлая часть: быстро уходит к центру и растворяется.
   R_in: 46,
   w_past_min: 1.2,
-  pastFadeHours: 8,
-  pastCompressionHours: 1.25,
-  pastEasePower: 1.8,
-  pastOpacityPower: 2.2,
+  pastFadeHours: 4,
+  pastCompressionHours: 0.6,
+  pastEasePower: 2.4,
+  pastOpacityPower: 2.5,
 
   // Дальний будущий отрезок.
   R_out: 158,
   w_min: 1.6,
   farOpacity: 0.52,
-  transitionHours: 1.5,
+  // Будущее выходит с основного кольца постепенно: 8–12 часов до начала.
+  futureMainHours: 8,
+  transitionHours: 4,
 
   horizonHours: 18,
   sampleMinutes: 2.5,
@@ -66,7 +68,7 @@ export type RibbonSegment = {
   deltaMinutes: number;
 };
 
-type ProfileOptions = Partial<Pick<RibbonTask, "current" | "done" | "lane" | "duration">> & { startDelta?: number };
+type ProfileOptions = Partial<Pick<RibbonTask, "current" | "done" | "lane" | "duration">>;
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const smoothstep = (value: number) => {
@@ -74,14 +76,10 @@ const smoothstep = (value: number) => {
   return t * t * (3 - 2 * t);
 };
 
-function baseProfile(deltaMinutes: number, taskStartDelta?: number) {
+function baseProfile(deltaMinutes: number) {
   const pastLimit = DIAL_CONFIG.pastFadeHours * 60;
   const transition = DIAL_CONFIG.transitionHours * 60;
   const farLimit = DIAL_CONFIG.horizonHours * 60;
-
-  if (deltaMinutes > 720 && taskStartDelta !== undefined && taskStartDelta >= 720) {
-    return { r: DIAL_CONFIG.R_out, w: DIAL_CONFIG.w_min, a: DIAL_CONFIG.farOpacity };
-  }
 
   if (deltaMinutes < 0) {
     const fadeProgress = clamp01(-deltaMinutes / pastLimit);
@@ -95,12 +93,13 @@ function baseProfile(deltaMinutes: number, taskStartDelta?: number) {
     };
   }
 
-  if (deltaMinutes <= 720) {
+  const mainRingEnd = DIAL_CONFIG.futureMainHours * 60;
+  if (deltaMinutes <= mainRingEnd) {
     return { r: DIAL_CONFIG.R0, w: DIAL_CONFIG.W0, a: 1 };
   }
 
-  if (deltaMinutes <= 720 + transition) {
-    const t = smoothstep((deltaMinutes - 720) / transition);
+  if (deltaMinutes <= mainRingEnd + transition) {
+    const t = smoothstep((deltaMinutes - mainRingEnd) / transition);
     return {
       r: DIAL_CONFIG.R0 + (DIAL_CONFIG.R_out - DIAL_CONFIG.R0) * t,
       w: DIAL_CONFIG.W0 + (DIAL_CONFIG.w_min - DIAL_CONFIG.W0) * t,
@@ -117,7 +116,7 @@ function baseProfile(deltaMinutes: number, taskStartDelta?: number) {
 
 /** Профиль радиуса, полутолщины и прозрачности для одной относительной минуты. */
 export function ribbonProfile(deltaMinutes: number, options: ProfileOptions = {}) {
-  const shape = baseProfile(deltaMinutes, options.startDelta);
+  const shape = baseProfile(deltaMinutes);
   const lane = Math.max(0, Math.min(DIAL_CONFIG.maxLanes, Math.floor(options.lane ?? 0)));
   const laneStep = Math.ceil(lane / 2);
   const laneDirection = lane % 2 === 1 ? -1 : 1;
@@ -134,8 +133,8 @@ export function ribbonProfile(deltaMinutes: number, options: ProfileOptions = {}
   const longTaskOffset = (options.duration ?? 0) > 720
     ? deltaMinutes < 0
       ? -DIAL_CONFIG.selfTurnGap * smoothstep(-deltaMinutes / (DIAL_CONFIG.pastCompressionHours * 60))
-      : deltaMinutes > 720
-        ? DIAL_CONFIG.selfTurnGap * smoothstep((deltaMinutes - 720) / (DIAL_CONFIG.transitionHours * 60))
+      : deltaMinutes > DIAL_CONFIG.futureMainHours * 60
+        ? DIAL_CONFIG.selfTurnGap * smoothstep((deltaMinutes - DIAL_CONFIG.futureMainHours * 60) / (DIAL_CONFIG.transitionHours * 60))
         : 0
     : 0;
 
@@ -181,8 +180,8 @@ export function ribbonSamples(task: RibbonTask, nowMin: number): RibbonSample[] 
     startDelta,
     endDelta,
     0,
-    720,
-    720 + DIAL_CONFIG.transitionHours * 60,
+    DIAL_CONFIG.futureMainHours * 60,
+    (DIAL_CONFIG.futureMainHours + DIAL_CONFIG.transitionHours) * 60,
   ].filter((value) => value >= visibleStart && value <= visibleEnd);
 
   const minutes = new Set<number>(boundaries);
@@ -199,7 +198,6 @@ export function ribbonSamples(task: RibbonTask, nowMin: number): RibbonSample[] 
     done: task.done,
     lane: task.lane,
     duration: task.duration,
-    startDelta,
   };
 
   return Array.from(minutes)
