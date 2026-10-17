@@ -64,7 +64,7 @@ export type RibbonSegment = {
   deltaMinutes: number;
 };
 
-type ProfileOptions = Pick<RibbonTask, "current" | "done" | "lane" | "duration"> & { startDelta?: number };
+type ProfileOptions = Partial<Pick<RibbonTask, "current" | "done" | "lane" | "duration">> & { startDelta?: number };
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const smoothstep = (value: number) => {
