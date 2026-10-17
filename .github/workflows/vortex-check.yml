@@ -1,0 +1,71 @@
+name: Vortex checks
+
+on:
+  push:
+    branches:
+      - feature/vortex-dial-view
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "package.json"
+      - ".github/workflows/vortex-check.yml"
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+
+  visual-smoke:
+    needs: lint-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        run: npx --yes playwright install --with-deps chromium
+      - name: Start dev server
+        run: |
+          npm run dev -- --hostname 127.0.0.1 > /tmp/dayrhythm-next.log 2>&1 &
+          echo $! > /tmp/dayrhythm-next.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3000/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/dayrhythm-next.log
+          exit 1
+      - name: Capture four simulated times
+        run: |
+          mkdir -p artifacts
+          npx --yes playwright screenshot --browser=chromium --viewport-size="1200,1300" --full-page --wait-for-timeout=3500 "http://127.0.0.1:3000/?now=09%3A00&demo=1" artifacts/vortex-09-00.png
+          npx --yes playwright screenshot --browser=chromium --viewport-size="1200,1300" --full-page --wait-for-timeout=3500 "http://127.0.0.1:3000/?now=15%3A00&demo=1" artifacts/vortex-15-00.png
+          npx --yes playwright screenshot --browser=chromium --viewport-size="1200,1300" --full-page --wait-for-timeout=3500 "http://127.0.0.1:3000/?now=21%3A00&demo=1" artifacts/vortex-21-00.png
+          npx --yes playwright screenshot --browser=chromium --viewport-size="1200,1300" --full-page --wait-for-timeout=3500 "http://127.0.0.1:3000/?now=03%3A00&demo=1" artifacts/vortex-03-00.png
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vortex-visual-checks
+          path: artifacts/*.png
+          if-no-files-found: warn
