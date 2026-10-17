@@ -537,6 +537,20 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
                 pointerEvents="stroke"
               />
 
+              {event.samples.length > 1 && (() => {
+                const first = event.samples[0];
+                const last = event.samples[event.samples.length - 1];
+                const startPoint = ribbonPointAt(event.samples, first.deltaMinutes);
+                const endPoint = ribbonPointAt(event.samples, last.deltaMinutes);
+                if (!startPoint || !endPoint) return null;
+                const startProgress = 0;
+                const endProgress = 1;
+                return <>
+                  <circle cx={startPoint.x} cy={startPoint.y} r={first.w} fill={colorForSegment(event.color, startProgress, event.task.done)} fillOpacity={first.a} className="vortex-ribbon-cap" pointerEvents="none" />
+                  <circle cx={endPoint.x} cy={endPoint.y} r={last.w} fill={colorForSegment(event.color, endProgress, event.task.done)} fillOpacity={last.a} className="vortex-ribbon-cap" pointerEvents="none" />
+                </>;
+              })()}
+
               {event.currentPoint && (
                 <g className="vortex-current-head" pointerEvents="none">
                   <circle cx={event.currentPoint.x} cy={event.currentPoint.y} r="5.5" className="vortex-current-head-glow" />
