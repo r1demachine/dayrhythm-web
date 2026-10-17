@@ -1,6 +1,18 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DIAL_CONFIG,
+  dialPolar,
+  ribbonCenterPath,
+  ribbonPath,
+  ribbonPointAt,
+  ribbonPointOnEdge,
+  ribbonProfile,
+  ribbonSamples,
+  ribbonSegments,
+  type RibbonSample,
+} from "./dial-geometry";
 
 export type VortexTask = {
   id: string;
@@ -28,83 +40,46 @@ type Props = {
   selectedDate: string;
   now: number;
   onAddTask: (task: VortexTaskDraft) => void;
+  onMoveTask?: (taskId: string, minute: number) => void;
 };
-
-export const CONFIG = {
-  // Радиус и толщина главного кольца.
-  R0: 112,
-  W0: 12,
-  // Внутренний край прошлого и внешний радиус далёкого будущего.
-  R_IN: 49,
-  R_OUT: 154,
-  // Толщина после перехода на внешний радиус.
-  w_min: 1.8,
-  w_far: 1.1,
-  // Длина плавного перехода после отметки +12 часов.
-  tau_minutes: 90,
-  past_depth_hours: 12,
-  horizon_hours: 18,
-  // Чем меньше шаг, тем гладче полоса, но тем больше точек SVG.
-  sample_minutes: 2,
-  minimum_arc_minutes: 10,
-  // Расстояние между пересекающимися делами и витками длинных задач.
-  lane_gap: 2,
-  self_turn_gap: 17,
-  colors: {
-    work: "#6266e9",
-    sport: "#f36c45",
-    rest: "#20a68a",
-    home: "#d6a52d",
-    personal: "#bc75c9",
-    extra: "#42a5f5"
-  }
-} as const;
 
 type Point = { x: number; y: number };
-type Occurrence = {
+type EventGeometry = {
   key: string;
   task: VortexTask;
-  startAbs: number;
+  dayOffset: number;
   startDelta: number;
   endDelta: number;
-  visibleStart: number;
-  visibleEnd: number;
-  lane: number;
-  path: string;
-  centerPath: string;
-  startCap: Point;
-  endCap: Point;
-  startWidth: number;
-  endWidth: number;
-  label: string;
-  labelOffset: number;
-  color: string;
   current: boolean;
   status: string;
+  samples: RibbonSample[];
+  segments: ReturnType<typeof ribbonSegments>;
+  centerPath: string;
+  labelPath: string;
+  label: string;
+  color: string;
+  labelColor: string;
+  currentPoint: Point | null;
 };
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const wrapMinute = (n: number) => ((n % 1440) + 1440) % 1440;
-const clockText = (n: number) => {
-  if (Math.abs(n - 1440) < 0.01) return "24:00";
-  return pad(Math.floor(wrapMinute(n) / 60)) + ":" + pad(Math.floor(wrapMinute(n) % 60));
+const CATEGORY_COLORS: Record<string, string> = {
+  Работа: "#6266e9",
+  Спорт: "#e9623b",
+  Отдых: "#168d75",
+  Быт: "#b48617",
+  Личное: "#9b58b5",
+};
+const pad = (value: number) => String(value).padStart(2, "0");
+const wrapMinute = (value: number) => ((value % 1440) + 1440) % 1440;
+const clockText = (value: number) => {
+  if (Math.abs(value - 1440) < 0.01) return "24:00";
+  const minute = wrapMinute(value);
+  return pad(Math.floor(minute / 60)) + ":" + pad(Math.floor(minute % 60));
 };
 const shiftDate = (date: string, days: number) => {
   const value = new Date(date + "T12:00:00");
   value.setDate(value.getDate() + days);
   return value.getFullYear() + "-" + pad(value.getMonth() + 1) + "-" + pad(value.getDate());
-};
-const smoothstep = (value: number) => {
-  const x = Math.max(0, Math.min(1, value));
-  return x * x * (3 - 2 * x);
-};
-const polar = (absoluteMinute: number, radius: number, cx = 200, cy = 200): Point => {
-  const clockMinute = ((absoluteMinute % 720) + 720) % 720;
-  const angle = clockMinute / 720 * Math.PI * 2 - Math.PI / 2;
-  return {
-    x: Number((cx + Math.cos(angle) * radius).toFixed(3)),
-    y: Number((cy + Math.sin(angle) * radius).toFixed(3))
-  };
 };
 const fmtDuration = (minutes: number) => {
   const rounded = Math.max(0, Math.round(minutes));
@@ -114,205 +89,224 @@ const fmtDuration = (minutes: number) => {
   if (hours) return hours + " ч";
   return mins + " мин";
 };
-const taskColor = (task: VortexTask) => task.color || CONFIG.colors[task.category === "Работа" ? "work" : task.category === "Спорт" ? "sport" : task.category === "Отдых" ? "rest" : task.category === "Быт" ? "home" : "personal"];
+const taskColor = (task: VortexTask) => task.color || CATEGORY_COLORS[task.category] || CATEGORY_COLORS.Личное;
 
-function shapeAt(delta: number, lane: number, taskDuration: number) {
-  const pastDepth = CONFIG.past_depth_hours * 60;
-  let radius = CONFIG.R0;
-  let width = CONFIG.W0;
-
-  if (delta < 0) {
-    const progress = smoothstep((-delta) / pastDepth);
-    radius = CONFIG.R0 - (CONFIG.R0 - CONFIG.R_IN) * progress;
-    width = CONFIG.W0 - (CONFIG.W0 - CONFIG.w_min) * progress;
-  } else if (delta <= 720) {
-    radius = CONFIG.R0;
-    width = CONFIG.W0;
-  } else if (delta <= 720 + CONFIG.tau_minutes) {
-    const progress = smoothstep((delta - 720) / CONFIG.tau_minutes);
-    radius = CONFIG.R0 + (CONFIG.R_OUT - CONFIG.R0) * progress;
-    width = CONFIG.W0 + (CONFIG.w_min - CONFIG.W0) * progress;
-  } else {
-    radius = CONFIG.R_OUT;
-    width = CONFIG.w_far;
-  }
-
-  if (taskDuration > 720) {
-    if (delta < 0) {
-      radius -= CONFIG.self_turn_gap * smoothstep((-delta) / pastDepth);
-    } else if (delta > 720) {
-      radius += CONFIG.self_turn_gap * smoothstep((delta - 720) / CONFIG.tau_minutes);
-    }
-  }
-
-  if (delta >= 720 + CONFIG.tau_minutes) width = CONFIG.w_far;
-  const safeLane = Math.min(lane, 4);
-  if (safeLane > 0) {
-    const distance = Math.ceil(safeLane / 2) * (width * 2 + CONFIG.lane_gap);
-    radius += safeLane % 2 === 1 ? -distance : distance;
-  }
-  return { radius, width };
+function hexRgb(value: string) {
+  const match = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(value);
+  if (!match) return { r: 98, g: 102, b: 233 };
+  return { r: parseInt(match[1], 16), g: parseInt(match[2], 16), b: parseInt(match[3], 16) };
 }
 
-function buildRibbonPath(start: number, end: number, now: number, lane: number, taskDuration: number) {
-  const visibleLength = Math.max(0, end - start);
-  const count = Math.max(2, Math.ceil(visibleLength / CONFIG.sample_minutes));
-  const samples = new Set<number>();
-  for (let i = 0; i <= count; i += 1) samples.add(start + visibleLength * i / count);
-  [-CONFIG.past_depth_hours * 60, 0, 720, 720 + CONFIG.tau_minutes, CONFIG.horizon_hours * 60].forEach(boundary => {
-    if (boundary >= start && boundary <= end) samples.add(boundary);
-  });
-  const times = Array.from(samples).sort((a, b) => a - b);
-  const outer: Point[] = [];
-  const inner: Point[] = [];
-  const center: Point[] = [];
-  const widths: number[] = [];
-  times.forEach(delta => {
-    const shape = shapeAt(delta, lane, taskDuration);
-    const clockMinute = now + delta;
-    outer.push(polar(clockMinute, shape.radius + shape.width));
-    inner.push(polar(clockMinute, Math.max(8, shape.radius - shape.width)));
-    center.push(polar(clockMinute, shape.radius));
-    widths.push(shape.width);
-  });
-  const outerPath = outer.map((p, i) => (i === 0 ? "M " : "L ") + p.x + " " + p.y).join(" ");
-  const innerPath = inner.slice().reverse().map(p => "L " + p.x + " " + p.y).join(" ");
-  const path = outerPath + " " + innerPath + " Z";
-  const centerPath = center.map((p, i) => (i === 0 ? "M " : "L ") + p.x + " " + p.y).join(" ");
-  const widest = widths.reduce((best, width, i) => width > widths[best] ? i : best, 0);
-  const widePoint = times[widest];
-  const mainStart = Math.max(start, 0);
-  const mainEnd = Math.min(end, 720);
-  const labelPoint = mainEnd > mainStart ? (mainStart + mainEnd) / 2 : widePoint;
-  const labelOffset = Math.max(0, Math.min(100, (labelPoint - start) / Math.max(1, visibleLength) * 100));
-  return {
-    path,
-    centerPath,
-    startCap: center[0],
-    endCap: center[center.length - 1],
-    startWidth: widths[0],
-    endWidth: widths[widths.length - 1],
-    labelOffset
+function mixColor(color: string, target: string, amount: number) {
+  const sourceRgb = hexRgb(color);
+  const targetRgb = hexRgb(target);
+  const blend = Math.max(0, Math.min(1, amount));
+  const channel = (a: number, b: number) => Math.round(a + (b - a) * blend).toString(16).padStart(2, "0");
+  return "#" + channel(sourceRgb.r, targetRgb.r) + channel(sourceRgb.g, targetRgb.g) + channel(sourceRgb.b, targetRgb.b);
+}
+
+function colorForSegment(color: string, progress: number, done: boolean) {
+  const desaturated = done ? mixColor(color, "#858585", 0.7) : color;
+  return mixColor(desaturated, "#ffffff", (1 - progress) * 0.25);
+}
+
+function readableLabelColor(color: string) {
+  const { r, g, b } = hexRgb(color);
+  const linear = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
   };
+  const luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  return luminance > 0.44 ? "#242620" : "#ffffff";
 }
 
-function labelFor(task: VortexTask, duration: number, visibleLength: number) {
-  const arcMinutes = Math.min(duration, visibleLength);
-  const approxPixels = arcMinutes / 720 * Math.PI * 2 * CONFIG.R0;
-  if (approxPixels < 45) return "";
+function buildLabel(task: VortexTask, samples: RibbonSample[]) {
+  if (samples.length < 2) return "";
+  const start = samples[0].deltaMinutes;
+  const end = samples[samples.length - 1].deltaMinutes;
+  const arcLength = Math.max(0, end - start) / 720 * Math.PI * 2 * DIAL_CONFIG.R0;
+  if (arcLength < 64) return "";
   const startText = clockText(task.start);
   const endText = clockText(wrapMinute(task.start + task.duration));
-  const range = startText + "–" + endText;
-  const maximumChars = Math.floor(approxPixels / 5.8);
-  const full = task.title + " · " + range;
+  const timeRange = startText + "–" + endText;
+  const maximumChars = Math.floor(arcLength / 5.5);
+  const full = task.title + " · " + timeRange;
   if (maximumChars >= full.length) return full;
-  if (maximumChars >= range.length + 5) {
-    const titleLength = maximumChars - range.length - 3;
-    return task.title.slice(0, Math.max(2, titleLength - 1)) + "… · " + range;
+  if (maximumChars >= timeRange.length + 4) {
+    const titleLength = maximumChars - timeRange.length - 3;
+    return task.title.slice(0, Math.max(2, titleLength - 1)) + "… · " + timeRange;
   }
-  if (maximumChars >= range.length) return range;
-  return "";
+  return maximumChars >= timeRange.length ? timeRange : "";
 }
 
-function assignLanes(events: Array<Omit<Occurrence, "lane" | "path" | "centerPath" | "startCap" | "endCap" | "startWidth" | "endWidth" | "label" | "labelOffset" | "color" | "current" | "status">>) {
-  const laneEnds: number[] = [];
-  return events.slice().sort((a, b) => a.visibleStart - b.visibleStart || a.visibleEnd - b.visibleEnd).map(event => {
-    let lane = laneEnds.findIndex(end => end <= event.visibleStart);
-    if (lane < 0) lane = laneEnds.length;
-    laneEnds[lane] = event.visibleEnd;
-    return { ...event, lane: Math.min(lane, 4) };
-  });
+function samplesForCurrentRing(samples: RibbonSample[]) {
+  return samples.filter((sample) => sample.deltaMinutes >= 0 && sample.deltaMinutes <= 720);
 }
 
-export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Props) {
+function taskStatus(startDelta: number, endDelta: number, current: boolean) {
+  if (current) return "Осталось " + fmtDuration(endDelta);
+  if (startDelta > 0) return "Начнётся через " + fmtDuration(startDelta);
+  return "Завершилось " + fmtDuration(-endDelta) + " назад";
+}
+
+function wallClockMinute() {
+  const date = new Date();
+  return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60 + date.getMilliseconds() / 60000;
+}
+
+export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMoveTask }: Props) {
   const [simulation, setSimulation] = useState(false);
-  const [simulationMinute, setSimulationMinute] = useState(Math.max(0, Math.min(1440, now)));
+  const [simulationMinute, setSimulationMinute] = useState(Math.max(0, Math.min(1439, now)));
+  const [liveMinute, setLiveMinute] = useState(now);
   const [hoveredTask, setHoveredTask] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftStart, setDraftStart] = useState("09:00");
   const [draftEnd, setDraftEnd] = useState("10:00");
-  const [draftColor, setDraftColor] = useState<string>(CONFIG.colors.work);
+  const [draftColor, setDraftColor] = useState<string>(CATEGORY_COLORS.Работа);
   const [draftNote, setDraftNote] = useState("");
   const [formError, setFormError] = useState("");
-  const [liveMinute, setLiveMinute] = useState(now);
+  const [dragPreview, setDragPreview] = useState<{ taskId: string; minute: number; dayOffset: number } | null>(null);
 
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragRef = useRef<{ taskId: string; dayOffset: number; startX: number; startY: number } | null>(null);
+  const movedRef = useRef(false);
+  const suppressClickRef = useRef(false);
+
+  // ?now=09:00 — только для локальной разработки и быстрой визуальной проверки.
   useEffect(() => {
-    const update = () => {
-      const date = new Date();
-      setLiveMinute(date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60);
-    };
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
+    if (process.env.NODE_ENV !== "development") return;
+    const match = /^\s*(\d{1,2}):([0-5]\d)\s*$/.exec(new URLSearchParams(window.location.search).get("now") || "");
+    if (!match) return;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour > 24 || (hour === 24 && minute !== 0)) return;
+    const value = hour * 60 + minute;
+    const initial = value === 1440 ? 0 : value;
+    setSimulationMinute(initial);
+    setSimulation(true);
   }, []);
 
+  // В обычном режиме циферблат перетекает между минутами через requestAnimationFrame.
+  // В системном режиме reduced motion оставляем секундное обновление без интерполяции.
   useEffect(() => {
-    if (!simulation) setSimulationMinute(Math.max(0, Math.min(1440, now)));
+    if (simulation) return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+    let lastUpdate = 0;
+    let interval = 0;
+
+    if (media.matches) {
+      const update = () => setLiveMinute(wallClockMinute());
+      update();
+      interval = window.setInterval(update, 1000);
+      return () => window.clearInterval(interval);
+    }
+
+    const animate = (timestamp: number) => {
+      if (timestamp - lastUpdate >= 40) {
+        const target = wallClockMinute();
+        setLiveMinute((previous) => {
+          let delta = target - previous;
+          if (delta < -720) delta += 1440;
+          if (delta > 720) delta -= 1440;
+          const next = previous + delta * 0.18;
+          return wrapMinute(Math.abs(next - target) < 0.001 ? target : next);
+        });
+        lastUpdate = timestamp;
+      }
+      frame = window.requestAnimationFrame(animate);
+    };
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [simulation]);
+
+  useEffect(() => {
+    if (!simulation) setSimulationMinute(Math.max(0, Math.min(1439, now)));
   }, [now, simulation]);
 
   const effectiveNow = simulation ? simulationMinute : liveMinute;
   const prevDate = useMemo(() => shiftDate(selectedDate, -1), [selectedDate]);
   const nextDate = useMemo(() => shiftDate(selectedDate, 1), [selectedDate]);
+  const taskDates = useMemo(() => new Map<string, number>([[prevDate, -1], [selectedDate, 0], [nextDate, 1]]), [prevDate, selectedDate, nextDate]);
 
-  const events = useMemo(() => {
-    const candidates: Array<Omit<Occurrence, "lane" | "path" | "centerPath" | "startCap" | "endCap" | "startWidth" | "endWidth" | "label" | "labelOffset" | "color" | "current" | "status">> = [];
-    const taskDates = new Map<string, number>([[prevDate, -1440], [selectedDate, 0], [nextDate, 1440]]);
-    const pastDepth = CONFIG.past_depth_hours * 60;
-    const horizon = CONFIG.horizon_hours * 60;
-    tasks.forEach(task => {
-      if (!taskDates.has(task.date)) return;
-      const startAbs = (taskDates.get(task.date) || 0) + task.start;
-      const startDelta = startAbs - effectiveNow;
+  const events = useMemo<EventGeometry[]>(() => {
+    const prepared = tasks.flatMap((task) => {
+      const dayOffset = taskDates.get(task.date);
+      if (dayOffset === undefined || task.duration <= 0) return [];
+      const startDelta = task.start + dayOffset * 1440 - effectiveNow;
       const endDelta = startDelta + task.duration;
-      if (endDelta <= 0 || endDelta < -pastDepth || startDelta > horizon) return;
-      let visibleStart = Math.max(startDelta, -pastDepth);
-      let visibleEnd = Math.min(endDelta, horizon);
-      if (visibleEnd - visibleStart < CONFIG.minimum_arc_minutes && startDelta <= horizon && endDelta >= -pastDepth) {
-        visibleEnd = Math.min(horizon, visibleStart + CONFIG.minimum_arc_minutes);
-        visibleStart = Math.max(-pastDepth, visibleEnd - CONFIG.minimum_arc_minutes);
-      }
-      if (visibleEnd <= visibleStart) return;
-      candidates.push({
-        key: task.id + "-" + task.date,
-        task,
-        startAbs,
-        startDelta,
-        endDelta,
-        visibleStart,
-        visibleEnd
-      });
-    });
-    return assignLanes(candidates).map(event => {
-      const ribbon = buildRibbonPath(event.visibleStart, event.visibleEnd, effectiveNow, event.lane, event.task.duration);
-      const duration = event.visibleEnd - event.visibleStart;
-      const current = event.startDelta <= 0 && event.endDelta > 0;
-      const status = current
-        ? "Осталось " + fmtDuration(event.endDelta)
-        : event.startDelta > 0
-          ? "Начнётся через " + fmtDuration(event.startDelta)
-          : "Завершилось " + fmtDuration(-event.endDelta) + " назад";
-      return {
-        ...event,
-        ...ribbon,
-        label: event.visibleStart < 720 && event.visibleEnd > 0 ? labelFor(event.task, event.task.duration, duration) : "",
-        color: taskColor(event.task),
-        current,
-        status
-      };
-    });
-  }, [tasks, prevDate, selectedDate, nextDate, effectiveNow]);
+      const visiblePast = -DIAL_CONFIG.pastFadeHours * 60;
+      const visibleFuture = DIAL_CONFIG.horizonHours * 60;
+      if (endDelta < visiblePast || startDelta > visibleFuture) return [];
+      const current = !task.done && startDelta <= 0 && endDelta > 0;
+      return [{ task, dayOffset, startDelta, endDelta, current, key: task.id + "-" + task.date }];
+    }).sort((a, b) => a.startDelta - b.startDelta || a.endDelta - b.endDelta);
 
-  const currentTask = events.find(event => event.current);
-  const cursor = polar(effectiveNow, CONFIG.R_OUT + 12);
-  const hourLabels = [0, 3, 6, 9].map(hour => {
-    const currentHour = Math.floor(effectiveNow / 60);
-    let candidate = Math.floor(currentHour / 12) * 720 + hour * 60;
-    while (candidate < currentHour * 60) candidate += 720;
-    const absoluteHour = Math.floor(candidate / 60);
-    const label = absoluteHour % 24 === 0 ? "24/0" : String(absoluteHour % 24);
-    const point = polar(hour * 60, CONFIG.R_OUT + 23);
-    return { label, x: point.x, y: point.y, hour };
+    const lanes: number[] = [];
+    const withLanes = prepared.map((event) => {
+      let lane = lanes.findIndex((end) => end <= event.startDelta);
+      if (lane < 0) lane = lanes.length;
+      lanes[lane] = event.endDelta;
+      return { ...event, lane: Math.min(lane, DIAL_CONFIG.maxLanes) };
+    });
+
+    return withLanes.flatMap((event) => {
+      const samples = ribbonSamples({
+        start: event.task.start,
+        duration: event.task.duration,
+        dayOffset: event.dayOffset,
+        lane: event.lane,
+        current: event.current,
+        done: event.task.done,
+      }, effectiveNow);
+      if (samples.length < 2) return [];
+      const segments = ribbonSegments(samples);
+      const centerPath = ribbonCenterPath(samples);
+      const ringSamples = samplesForCurrentRing(samples);
+      const labelPath = ribbonCenterPath(ringSamples);
+      const middle = ribbonProfile(360, { lane: event.lane, current: event.current, done: event.task.done, duration: event.task.duration });
+      const label = middle.w * 2 >= 14 ? buildLabel(event.task, ringSamples) : "";
+      const color = taskColor(event.task);
+      return [{
+        ...event,
+        samples,
+        segments,
+        centerPath,
+        labelPath,
+        label,
+        color,
+        labelColor: readableLabelColor(colorForSegment(color, 0.75, event.task.done)),
+        currentPoint: event.current ? ribbonPointAt(samples, 0) : null,
+        status: taskStatus(event.startDelta, event.endDelta, event.current),
+      }];
+    });
+  }, [tasks, taskDates, effectiveNow]);
+
+  const currentTask = events.find((event) => event.current);
+  const hoveredEvent = events.find((event) => event.key === hoveredTask);
+  const cursor = dialPolar(effectiveNow, DIAL_CONFIG.R0 - DIAL_CONFIG.W0);
+  const guideSamples = useMemo(() => {
+    const startAbs = effectiveNow - DIAL_CONFIG.pastFadeHours * 60;
+    const normalizedStart = wrapMinute(startAbs);
+    const dayOffset = Math.floor(startAbs / 1440);
+    return ribbonSamples({
+      start: normalizedStart,
+      dayOffset,
+      duration: DIAL_CONFIG.pastFadeHours * 60 + DIAL_CONFIG.horizonHours * 60,
+      lane: 0,
+    }, effectiveNow);
+  }, [effectiveNow]);
+  const guidePath = useMemo(() => ribbonCenterPath(guideSamples), [guideSamples]);
+
+  const hourLabels = [0, 180, 360, 540].map((clockMinute) => {
+    const currentHalfDay = Math.floor(effectiveNow / 720) * 720;
+    let absoluteMinute = currentHalfDay + clockMinute;
+    while (absoluteMinute < effectiveNow - 0.01) absoluteMinute += 720;
+    const absoluteHour = Math.floor(absoluteMinute / 60);
+    const label = absoluteHour === 0 ? "24" : String(absoluteHour % 24 || 24);
+    const point = dialPolar(clockMinute, 181);
+    return { label, x: point.x, y: point.y, clockMinute };
   });
 
   const addTask = (event: FormEvent<HTMLFormElement>) => {
@@ -341,15 +335,84 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
 
   const addDemoTasks = () => {
     const demo = [
-      { date: selectedDate, title: "Фокус и планирование", start: 8 * 60, duration: 150, color: CONFIG.colors.work, note: "Текущее дело с видимым прошлым участком." },
-      { date: selectedDate, title: "Рабочий блок", start: 14 * 60, duration: 120, color: CONFIG.colors.sport, note: "Полная дуга в основном 12-часовом кольце." },
-      { date: selectedDate, title: "Вечерний план", start: 20 * 60, duration: 120, color: CONFIG.colors.rest, note: "Переходит в тонкую внешнюю дугу после 12 часов." },
-      { date: selectedDate, title: "Ночной блок", start: 2 * 60, duration: 120, color: CONFIG.colors.personal, note: "Демо для симуляции 03:00." },
-      { date: nextDate, title: "Ночной блок", start: 2 * 60, duration: 120, color: CONFIG.colors.personal, note: "Повтор на следующую ночь для теста горизонта 18 часов." }
+      { date: selectedDate, title: "Утренний фокус", start: 8 * 60, duration: 150, color: CATEGORY_COLORS.Работа, note: "Дело уже идёт: прошлая часть должна сужаться к центру." },
+      { date: selectedDate, title: "Короткая встреча", start: 8 * 60 + 45, duration: 90, color: CATEGORY_COLORS.Спорт, note: "Перекрывается с утренним фокусом — проверка дорожек." },
+      { date: selectedDate, title: "Рабочий блок", start: 14 * 60, duration: 120, color: CATEGORY_COLORS.Работа, note: "Обычная дуга внутри ближайших 12 часов." },
+      { date: selectedDate, title: "Вечерняя прогулка", start: 20 * 60, duration: 120, color: CATEGORY_COLORS.Отдых, note: "Переходит на тонкую внешнюю ленту." },
+      { date: selectedDate, title: "Дело через полночь", start: 23 * 60, duration: 180, color: CATEGORY_COLORS.Быт, note: "Окончание в 02:00 следующего дня." },
+      { date: prevDate, title: "Ночная смена", start: 23 * 60, duration: 360, color: CATEGORY_COLORS.Личное, note: "Перекрывает полночь и активно до 05:00." },
     ];
-    demo.filter(item => !tasks.some(task => task.date === item.date && task.title === item.title && task.start === item.start && task.duration === item.duration))
-      .forEach(item => onAddTask({ date: item.date, title: item.title, start: item.start, duration: item.duration, color: item.color, note: item.note }));
+    demo.filter((item) => !tasks.some((task) => task.date === item.date && task.title === item.title && task.start === item.start && task.duration === item.duration))
+      .forEach((item) => onAddTask({ date: item.date, title: item.title, start: item.start, duration: item.duration, color: item.color, note: item.note }));
   };
+
+  const pointerMinute = (event: ReactPointerEvent<SVGSVGElement>, taskStart: number) => {
+    const svg = svgRef.current;
+    if (!svg) return taskStart;
+    const rect = svg.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * DIAL_CONFIG.viewSize;
+    const y = ((event.clientY - rect.top) / rect.height) * DIAL_CONFIG.viewSize;
+    const angle = (Math.atan2(y - DIAL_CONFIG.cy, x - DIAL_CONFIG.cx) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
+    const halfDay = taskStart >= 720 ? 720 : 0;
+    return Math.max(0, Math.min(1435, Math.round((halfDay + angle / (Math.PI * 2) * 720) / 15) * 15));
+  };
+
+  const onEventPointerDown = (event: ReactPointerEvent<SVGSVGElement>, geometry: EventGeometry) => {
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    dragRef.current = {
+      taskId: geometry.task.id,
+      dayOffset: geometry.dayOffset,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    movedRef.current = false;
+    svgRef.current?.setPointerCapture(event.pointerId);
+  };
+
+  const onDialPointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    if (distance <= 7) return;
+    movedRef.current = true;
+    const task = tasks.find((item) => item.id === drag.taskId);
+    if (!task) return;
+    setDragPreview({ taskId: drag.taskId, minute: pointerMinute(event, task.start), dayOffset: drag.dayOffset });
+  };
+
+  const onDialPointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (!drag) return;
+    if (movedRef.current) {
+      const task = tasks.find((item) => item.id === drag.taskId);
+      if (task) {
+        const minute = pointerMinute(event, task.start);
+        onMoveTask?.(drag.taskId, minute);
+        suppressClickRef.current = true;
+      }
+    }
+    setDragPreview(null);
+  };
+
+  const onDialPointerCancel = () => {
+    dragRef.current = null;
+    movedRef.current = false;
+    setDragPreview(null);
+  };
+
+  const preview = dragPreview ? (() => {
+    const task = tasks.find((item) => item.id === dragPreview.taskId);
+    if (!task) return null;
+    const previewSamples = ribbonSamples({
+      start: dragPreview.minute,
+      duration: task.duration,
+      dayOffset: dragPreview.dayOffset,
+      current: false,
+      done: task.done,
+    }, effectiveNow);
+    return { task, path: ribbonPath(previewSamples), color: taskColor(task) };
+  })() : null;
 
   return (
     <section className="vortex-view">
@@ -357,7 +420,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
         <div className="vortex-mode-description">
           <span className="vortex-kicker">ДИНАМИЧЕСКАЯ ШКАЛА ВРЕМЕНИ</span>
           <strong>Водоворот ближайших 18 часов</strong>
-          <small>Прошлое сужается к центру, дальние дела уходят наружу.</small>
+          <small>Прошлое сжимается и растворяется; дальние дела уходят наружу.</small>
         </div>
         <div className="vortex-actions">
           <button className="outline-button" type="button" onClick={() => setFormOpen(true)}>＋ Дело</button>
@@ -367,74 +430,186 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
 
       <div className="vortex-simulation">
         <label className="vortex-simulation-toggle">
-          <input type="checkbox" checked={simulation} onChange={event => setSimulation(event.target.checked)} />
+          <input type="checkbox" checked={simulation} onChange={(event) => setSimulation(event.target.checked)} />
           <span>Симуляция времени</span>
         </label>
         <div className="vortex-slider-label"><span>Сейчас</span><strong>{clockText(effectiveNow)}</strong></div>
-        <input className="vortex-time-slider" type="range" min={0} max={1440} step={1} value={simulation ? simulationMinute : Math.floor(liveMinute)} disabled={!simulation} onChange={event => setSimulationMinute(Number(event.target.value))} aria-label="Симулируемое время от 00:00 до 24:00" />
+        <input
+          className="vortex-time-slider"
+          type="range"
+          min={0}
+          max={1439}
+          step={1}
+          value={simulation ? simulationMinute : Math.floor(wrapMinute(liveMinute))}
+          disabled={!simulation}
+          onChange={(event) => setSimulationMinute(Number(event.target.value))}
+          aria-label="Симулируемое время от 00:00 до 23:59"
+        />
         <div className="vortex-slider-ends"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
       </div>
 
       <div className="vortex-stage">
-        <svg className="vortex-dial" viewBox="0 0 400 400" role="img" aria-label="Водоворот расписания на 12-часовом циферблате">
+        <svg
+          ref={svgRef}
+          className="vortex-dial"
+          viewBox={`0 0 ${DIAL_CONFIG.viewSize} ${DIAL_CONFIG.viewSize}`}
+          role="img"
+          aria-label="Водоворот дел: прошлое сжимается к центру, ближайшие 12 часов выделены толстой лентой"
+          onPointerMove={onDialPointerMove}
+          onPointerUp={onDialPointerUp}
+          onPointerCancel={onDialPointerCancel}
+        >
           <defs>
-            <filter id="vortexShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".09" /></filter>
+            <filter id="vortex-current-glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="3.2" />
+            </filter>
           </defs>
-          <circle cx="200" cy="200" r={CONFIG.R_OUT} className="vortex-track" />
-          <circle cx="200" cy="200" r={CONFIG.R0} className="vortex-main-track" />
-          {hourLabels.map(item => <g key={item.hour}>
-            <text x={item.x} y={item.y} className="vortex-hour-label">{item.label}</text>
-            <circle cx={polar(item.hour * 60, CONFIG.R_OUT - 12).x} cy={polar(item.hour * 60, CONFIG.R_OUT - 12).y} r="2.3" className="vortex-hour-dot" />
-          </g>)}
-          {events.map(event => <g key={event.key} className="vortex-event" role="button" tabIndex={0} aria-label={event.task.title + ", " + clockText(event.task.start) + "–" + clockText(wrapMinute(event.task.start + event.task.duration))} onPointerEnter={pointerEvent => { if (pointerEvent.pointerType !== "touch") setHoveredTask(event.key); }} onPointerLeave={pointerEvent => { if (pointerEvent.pointerType !== "touch") setHoveredTask(null); }} onClick={() => setHoveredTask(event.key)} onKeyDown={keyEvent => { if (keyEvent.key === "Enter" || keyEvent.key === " ") { keyEvent.preventDefault(); setHoveredTask(event.key); } }}>
-            <path id={"vortex-center-" + event.key} d={event.centerPath} fill="none" stroke="none" />
-            <path d={event.path} fill={event.color} opacity={event.task.done ? .28 : event.current ? .98 : event.endDelta <= 0 ? .48 : event.startDelta >= 720 + CONFIG.tau_minutes ? .45 : .88} className="vortex-ribbon" />
-            <circle cx={event.startCap.x} cy={event.startCap.y} r={event.startWidth} fill={event.color} opacity={event.task.done ? .28 : event.current ? .98 : .86} className="vortex-cap" pointerEvents="none" />
-            <circle cx={event.endCap.x} cy={event.endCap.y} r={event.endWidth} fill={event.color} opacity={event.task.done ? .28 : event.current ? .98 : .86} className="vortex-cap" pointerEvents="none" />
-            {event.label && <text className="vortex-label"><textPath href={"#vortex-center-" + event.key} startOffset={event.labelOffset + "%"} textAnchor="middle">{event.label}</textPath></text>}
-          </g>)}
-          <line x1="200" y1="200" x2={cursor.x} y2={cursor.y} className="vortex-now-line" />
-          <circle cx={cursor.x} cy={cursor.y} r="4.5" className="vortex-now-dot" />
-          <circle cx="200" cy="200" r="43" className="vortex-center" filter="url(#vortexShadow)" />
-          <text x="200" y="190" className="vortex-center-overline">{simulation ? "СИМУЛЯЦИЯ" : "СЕЙЧАС"}</text>
-          <text x="200" y="216" className="vortex-center-time">{clockText(effectiveNow)}</text>
-          <text x="200" y="234" className="vortex-center-task">{currentTask ? currentTask.task.title.slice(0, 20) : events.length ? "ближайшие дела" : "добавь первое дело"}</text>
+
+          <circle cx={DIAL_CONFIG.cx} cy={DIAL_CONFIG.cy} r="76" className="vortex-orbit-guide" />
+          <circle cx={DIAL_CONFIG.cx} cy={DIAL_CONFIG.cy} r="174" className="vortex-orbit-guide vortex-orbit-guide-outer" />
+          <path d={guidePath} className="vortex-spiral-guide" />
+
+          {Array.from({ length: 12 }, (_, hour) => {
+            const tickMinute = hour * 60;
+            const major = hour % 3 === 0;
+            const inner = dialPolar(tickMinute, 169);
+            const outer = dialPolar(tickMinute, major ? 174 : 172);
+            return <line key={hour} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} className={major ? "vortex-tick vortex-tick-major" : "vortex-tick"} />;
+          })}
+
+          {hourLabels.map((item) => (
+            <text key={item.clockMinute} x={item.x} y={item.y} className="vortex-hour-label">{item.label}</text>
+          ))}
+
+          {events.map((event) => (
+            <g
+              key={event.key}
+              className="vortex-event"
+              role="button"
+              tabIndex={0}
+              aria-label={event.task.title + ", " + clockText(event.task.start) + "–" + clockText(wrapMinute(event.task.start + event.task.duration))}
+              onPointerEnter={(pointerEvent) => { if (pointerEvent.pointerType !== "touch") setHoveredTask(event.key); }}
+              onPointerLeave={(pointerEvent) => { if (pointerEvent.pointerType !== "touch") setHoveredTask(null); }}
+              onPointerDown={(pointerEvent) => onEventPointerDown(pointerEvent, event)}
+              onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  return;
+                }
+                setHoveredTask((previous) => previous === event.key ? null : event.key);
+              }}
+              onKeyDown={(keyEvent) => {
+                if (keyEvent.key === "Enter" || keyEvent.key === " ") {
+                  keyEvent.preventDefault();
+                  setHoveredTask((previous) => previous === event.key ? null : event.key);
+                }
+              }}
+            >
+              <path id={"vortex-center-" + event.key} d={event.centerPath} fill="none" stroke="none" />
+              <path id={"vortex-label-" + event.key} d={event.labelPath} fill="none" stroke="none" />
+
+              {event.current && (
+                <path
+                  d={ribbonPath(event.samples)}
+                  fill={event.color}
+                  opacity={0.42}
+                  filter="url(#vortex-current-glow)"
+                  pointerEvents="none"
+                />
+              )}
+
+              {event.segments.map((segment) => (
+                <path
+                  key={segment.key}
+                  d={segment.path}
+                  fill={colorForSegment(event.color, segment.progress, event.task.done)}
+                  fillOpacity={segment.opacity}
+                  className="vortex-ribbon-segment"
+                  pointerEvents="visibleFill"
+                />
+              ))}
+
+              <path
+                d={event.centerPath}
+                className="vortex-hit-area"
+                fill="none"
+                stroke="transparent"
+                strokeWidth="10"
+                pointerEvents="stroke"
+              />
+
+              {event.currentPoint && (
+                <g className="vortex-current-head" pointerEvents="none">
+                  <circle cx={event.currentPoint.x} cy={event.currentPoint.y} r="5.5" className="vortex-current-head-glow" />
+                  <circle cx={event.currentPoint.x} cy={event.currentPoint.y} r="2.8" className="vortex-current-head-dot" />
+                </g>
+              )}
+
+              {event.label && (
+                <text className="vortex-label" fill={event.labelColor}>
+                  <textPath href={"#vortex-label-" + event.key} startOffset="50%" textAnchor="middle">{event.label}</textPath>
+                </text>
+              )}
+            </g>
+          ))}
+
+          {preview && (
+            <g className="vortex-drag-preview" pointerEvents="none">
+              <path d={preview.path} fill={preview.color} fillOpacity=".12" />
+              <path d={preview.path} fill="none" stroke={preview.color} strokeWidth="1.2" strokeDasharray="4 4" opacity=".65" />
+            </g>
+          )}
+
+          <line x1={DIAL_CONFIG.cx} y1={DIAL_CONFIG.cy} x2={cursor.x} y2={cursor.y} className="vortex-now-line" />
+          <circle cx={cursor.x} cy={cursor.y} r="5.2" className="vortex-now-pulse" />
+          <circle cx={cursor.x} cy={cursor.y} r="2.5" className="vortex-now-dot" />
+
+          <circle cx={DIAL_CONFIG.cx} cy={DIAL_CONFIG.cy} r="37" className="vortex-center" />
+          <text x={DIAL_CONFIG.cx} y={DIAL_CONFIG.cy - 17} className="vortex-center-overline">{simulation ? "СИМУЛЯЦИЯ" : "СЕЙЧАС"}</text>
+          <text x={DIAL_CONFIG.cx} y={DIAL_CONFIG.cy + 7} className="vortex-center-time">{clockText(effectiveNow)}</text>
+          <text x={DIAL_CONFIG.cx} y={DIAL_CONFIG.cy + 24} className="vortex-center-task">
+            {currentTask ? currentTask.task.title.slice(0, 17) : events.length ? "ближайшие дела" : "добавь первое дело"}
+          </text>
         </svg>
 
-        {hoveredTask && events.some(event => event.key === hoveredTask) && (() => {
-          const event = events.find(item => item.key === hoveredTask);
-          if (!event) return null;
-          const taskDuration = event.task.duration;
-          return <div className="vortex-tooltip">
-            <strong>{event.task.title}</strong>
-            <span className="vortex-tooltip-time">{clockText(event.task.start)}–{clockText(wrapMinute(event.task.start + taskDuration))}</span>
-            <span>Длительность: {fmtDuration(taskDuration)}</span>
-            <span>{event.status}</span>
-            <p>{event.task.note || "Описание не добавлено."}</p>
-          </div>;
-        })()}
+        {hoveredEvent && (
+          <div className="vortex-tooltip">
+            <strong>{hoveredEvent.task.title}</strong>
+            <span className="vortex-tooltip-time">{clockText(hoveredEvent.task.start)}–{clockText(wrapMinute(hoveredEvent.task.start + hoveredEvent.task.duration))}</span>
+            <span>Длительность: {fmtDuration(hoveredEvent.task.duration)}</span>
+            <span>{hoveredEvent.status}</span>
+            {hoveredEvent.task.date !== selectedDate && <span>{hoveredEvent.dayOffset < 0 ? "Предыдущий день" : "Следующий день"}</span>}
+            <p>{hoveredEvent.task.note || "Описание не добавлено."}</p>
+          </div>
+        )}
         {events.length === 0 && <div className="vortex-empty">В этом временном окне нет дел. Нажми «+ Дело» или добавь демо-дела.</div>}
+        {dragPreview && <div className="vortex-drag-time">Новое время: <strong>{clockText(dragPreview.minute)}</strong></div>}
       </div>
 
-      <div className="vortex-note">Положение определяется временем суток, радиус и толщина — временем относительно текущего момента. Серая область за основным кольцом — ближайшие часы после 12-часового окна.</div>
+      <div className="vortex-note">Цвет меняется вдоль ленты: начало мягче, конец насыщеннее. Затухание зависит от времени относительно текущего момента; дела после +12 часов становятся тонкими и выходят на внешний радиус.</div>
 
-      {formOpen && <div className="vortex-form-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setFormOpen(false); }}>
-        <section className="vortex-form-card" role="dialog" aria-modal="true" aria-labelledby="vortex-form-title">
-          <div className="vortex-form-heading"><div><span className="vortex-kicker">НОВОЕ ДЕЛО</span><h3 id="vortex-form-title">Добавить в водоворот</h3></div><button className="icon-button" type="button" onClick={() => setFormOpen(false)} aria-label="Закрыть">×</button></div>
-          <form onSubmit={addTask}>
-            <label className="field-label">Название<input autoFocus value={draftTitle} onChange={event => setDraftTitle(event.target.value)} maxLength={100} placeholder="Например, тренировка" required /></label>
-            <div className="field-grid">
-              <label className="field-label">Начало<input type="time" value={draftStart} onChange={event => setDraftStart(event.target.value)} required /></label>
-              <label className="field-label">Конец<input type="time" value={draftEnd} onChange={event => setDraftEnd(event.target.value)} required /></label>
+      {formOpen && (
+        <div className="vortex-form-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormOpen(false); }}>
+          <section className="vortex-form-card" role="dialog" aria-modal="true" aria-labelledby="vortex-form-title">
+            <div className="vortex-form-heading">
+              <div><span className="vortex-kicker">НОВОЕ ДЕЛО</span><h3 id="vortex-form-title">Добавить в водоворот</h3></div>
+              <button className="icon-button" type="button" onClick={() => setFormOpen(false)} aria-label="Закрыть">×</button>
             </div>
-            <label className="field-label">Цвет<input className="vortex-color-input" type="color" value={draftColor} onChange={event => setDraftColor(event.target.value)} /></label>
-            <label className="field-label">Описание<textarea value={draftNote} onChange={event => setDraftNote(event.target.value)} maxLength={500} rows={3} placeholder="Что важно знать об этом деле?" /></label>
-            {formError && <p className="vortex-form-error">{formError}</p>}
-            <div className="modal-actions"><button className="outline-button" type="button" onClick={() => setFormOpen(false)}>Отмена</button><button className="primary-button" type="submit">Добавить дело</button></div>
-          </form>
-          <p className="vortex-form-help">Если время окончания раньше начала, дело автоматически продолжается через полночь.</p>
-        </section>
-      </div>}
+            <form onSubmit={addTask}>
+              <label className="field-label">Название<input autoFocus value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} maxLength={100} placeholder="Например, тренировка" required /></label>
+              <div className="field-grid">
+                <label className="field-label">Начало<input type="time" value={draftStart} onChange={(event) => setDraftStart(event.target.value)} required /></label>
+                <label className="field-label">Конец<input type="time" value={draftEnd} onChange={(event) => setDraftEnd(event.target.value)} required /></label>
+              </div>
+              <label className="field-label">Цвет<input className="vortex-color-input" type="color" value={draftColor} onChange={(event) => setDraftColor(event.target.value)} /></label>
+              <label className="field-label">Описание<textarea value={draftNote} onChange={(event) => setDraftNote(event.target.value)} maxLength={500} rows={3} placeholder="Что важно знать об этом деле?" /></label>
+              {formError && <p className="vortex-form-error">{formError}</p>}
+              <div className="modal-actions"><button className="outline-button" type="button" onClick={() => setFormOpen(false)}>Отмена</button><button className="primary-button" type="submit">Добавить дело</button></div>
+            </form>
+            <p className="vortex-form-help">Если время окончания раньше начала, дело автоматически продолжается через полночь.</p>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
