@@ -189,3 +189,4 @@
 .vortex-form-help{margin-top:14px;color:var(--muted);font-size:10px;line-height:1.5}
 @media(max-width:760px){.vortex-toolbar{align-items:flex-start}.vortex-actions{width:100%}.vortex-actions .outline-button{flex:1}.vortex-simulation{padding:11px}.vortex-stage{max-width:440px}.vortex-hour-label{font-size:10px}.vortex-label{font-size:7px}.vortex-tooltip{top:6px;width:min(255px,calc(100% - 12px))}.vortex-form-card{padding:19px 16px}}
 @media(prefers-reduced-motion:reduce){.vortex-ribbon,.vortex-cap{transition:none!important}.vortex-tooltip,.vortex-form-card{animation:none!important}}
+.vortex-event:focus,.vortex-event:focus-visible{outline:none}
