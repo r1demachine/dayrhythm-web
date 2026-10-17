@@ -329,7 +329,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
     while (absoluteMinute < effectiveNow - 0.01) absoluteMinute += 720;
     const absoluteHour = Math.floor(absoluteMinute / 60);
     const label = absoluteHour === 0 ? "24" : String(absoluteHour % 24 || 24);
-    const point = dialPolar(clockMinute, 181);
+    const point = dialPolar(clockMinute, 191);
     return { label, x: point.x, y: point.y, clockMinute };
   });
 
