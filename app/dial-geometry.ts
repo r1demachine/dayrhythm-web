@@ -14,6 +14,7 @@ export const DIAL_CONFIG = {
   R_in: 46,
   w_past_min: 1.2,
   pastFadeHours: 8,
+  pastCompressionHours: 1.25,
   pastEasePower: 1.8,
   pastOpacityPower: 2.2,
 
@@ -82,13 +83,14 @@ function baseProfile(deltaMinutes: number, taskStartDelta?: number) {
   }
 
   if (deltaMinutes < 0) {
-    const t = clamp01(-deltaMinutes / pastLimit);
-    // 1 - (1 - t)^p даёт сильное сжатие сразу за отметкой «сейчас».
-    const compression = 1 - Math.pow(1 - t, DIAL_CONFIG.pastEasePower);
+    const fadeProgress = clamp01(-deltaMinutes / pastLimit);
+    const compressionProgress = clamp01((-deltaMinutes) / (DIAL_CONFIG.pastCompressionHours * 60));
+    // Сжатие до внутреннего радиуса идёт за короткий интервал, а alpha затухает все 8 часов.
+    const compression = 1 - Math.pow(1 - compressionProgress, DIAL_CONFIG.pastEasePower);
     return {
       r: DIAL_CONFIG.R0 - (DIAL_CONFIG.R0 - DIAL_CONFIG.R_in) * compression,
       w: DIAL_CONFIG.W0 - (DIAL_CONFIG.W0 - DIAL_CONFIG.w_past_min) * compression,
-      a: Math.pow(1 - t, DIAL_CONFIG.pastOpacityPower),
+      a: Math.pow(1 - fadeProgress, DIAL_CONFIG.pastOpacityPower),
     };
   }
 
