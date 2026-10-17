@@ -340,7 +340,7 @@ export default function Home() {
             <button className={dialMode === "vortex" ? "dial-mode-option active" : "dial-mode-option"} onClick={() => { setDialMode("vortex"); setTaskTooltip(null); }}>Водоворот</button>
           </div>
           <div className={dialMode === "list24" ? "dial-wrap dial-wrap-list" : "dial-wrap"} ref={dialWrapRef}>
-            {dialMode === "vortex" ? <VortexDial tasks={tasks} selectedDate={selectedDate} now={now} onAddTask={addVortexTask} onMoveTask={moveTask} /> : (
+            {dialMode === "vortex" ? <VortexDial tasks={tasks} selectedDate={selectedDate} now={now} onAddTask={addVortexTask} onMoveTask={moveTask} isReady={ready} /> : (
             <>
             {dragPreview && dialMode !== "list24" && <div className="drag-time-preview">Новое время: <strong>{timeText(dragPreview.minute)}</strong></div>}
             {dialMode === "list24" ? (
