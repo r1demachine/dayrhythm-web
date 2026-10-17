@@ -71,7 +71,6 @@ const smoothstep = (value: number) => {
   const t = clamp01(value);
   return t * t * (3 - 2 * t);
 };
-const positiveModulo = (value: number, base: number) => ((value % base) + base) % base;
 
 function baseProfile(deltaMinutes: number) {
   const pastLimit = DIAL_CONFIG.pastFadeHours * 60;
