@@ -15,7 +15,7 @@ export const DIAL_CONFIG = {
   w_past_min: 1.2,
   pastFadeHours: 8,
   pastEasePower: 1.8,
-  pastOpacityPower: 1.4,
+  pastOpacityPower: 2.2,
 
   // Дальний будущий отрезок.
   R_out: 158,
@@ -64,7 +64,7 @@ export type RibbonSegment = {
   deltaMinutes: number;
 };
 
-type ProfileOptions = Pick<RibbonTask, "current" | "done" | "lane" | "duration">;
+type ProfileOptions = Pick<RibbonTask, "current" | "done" | "lane" | "duration"> & { startDelta?: number };
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const smoothstep = (value: number) => {
@@ -72,12 +72,12 @@ const smoothstep = (value: number) => {
   return t * t * (3 - 2 * t);
 };
 
-function baseProfile(deltaMinutes: number) {
+function baseProfile(deltaMinutes: number, taskStartDelta?: number) {
   const pastLimit = DIAL_CONFIG.pastFadeHours * 60;
   const transition = DIAL_CONFIG.transitionHours * 60;
   const farLimit = DIAL_CONFIG.horizonHours * 60;
 
-  if (deltaMinutes < 0) {
+  if (deltaMinutes > 720 && taskStartDelta !== undefined && taskStartDelta >= 720) {\n    return { r: DIAL_CONFIG.R_out, w: DIAL_CONFIG.w_min, a: DIAL_CONFIG.farOpacity };\n  }\n\n  if (deltaMinutes < 0) {
     const t = clamp01(-deltaMinutes / pastLimit);
     // 1 - (1 - t)^p даёт сильное сжатие сразу за отметкой «сейчас».
     const compression = 1 - Math.pow(1 - t, DIAL_CONFIG.pastEasePower);
@@ -110,7 +110,7 @@ function baseProfile(deltaMinutes: number) {
 
 /** Профиль радиуса, полутолщины и прозрачности для одной относительной минуты. */
 export function ribbonProfile(deltaMinutes: number, options: ProfileOptions = {}) {
-  const shape = baseProfile(deltaMinutes);
+  const shape = baseProfile(deltaMinutes, options.startDelta);
   const lane = Math.max(0, Math.min(DIAL_CONFIG.maxLanes, Math.floor(options.lane ?? 0)));
   const laneStep = Math.ceil(lane / 2);
   const laneDirection = lane % 2 === 1 ? -1 : 1;
