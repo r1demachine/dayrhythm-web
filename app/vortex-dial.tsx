@@ -296,8 +296,9 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
   const currentTask = events.find(event => event.current);
   const cursor = polar(effectiveNow, CONFIG.R_OUT + 12);
   const hourLabels = [0, 3, 6, 9].map(hour => {
-    let candidate = Math.floor(effectiveNow / 720) * 720 + hour * 60;
-    while (candidate < effectiveNow - 0.01) candidate += 720;
+    const currentHour = Math.floor(effectiveNow / 60);
+    let candidate = Math.floor(currentHour / 12) * 720 + hour * 60;
+    while (candidate < currentHour * 60) candidate += 720;
     const absoluteHour = Math.floor(candidate / 60);
     const label = absoluteHour % 24 === 0 ? "24/0" : String(absoluteHour % 24);
     const point = polar(hour * 60, CONFIG.R_OUT + 23);
