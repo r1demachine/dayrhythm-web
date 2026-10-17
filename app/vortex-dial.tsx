@@ -112,7 +112,6 @@ const taskColor = (task: VortexTask) => task.color || CONFIG.colors[task.categor
 
 function shapeAt(delta: number, lane: number, taskDuration: number) {
   const pastDepth = CONFIG.past_depth_hours * 60;
-  const horizon = CONFIG.horizon_hours * 60;
   let radius = CONFIG.R0;
   let width = CONFIG.W0;
 
@@ -187,7 +186,7 @@ function buildRibbonPath(start: number, end: number, now: number, lane: number, 
   };
 }
 
-function labelFor(task: VortexTask, startAbs: number, duration: number, visibleLength: number) {
+function labelFor(task: VortexTask, duration: number, visibleLength: number) {
   const arcMinutes = Math.min(duration, visibleLength);
   const approxPixels = arcMinutes / 720 * Math.PI * 2 * CONFIG.R0;
   if (approxPixels < 45) return "";
@@ -256,7 +255,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
       const startAbs = (taskDates.get(task.date) || 0) + task.start;
       const startDelta = startAbs - effectiveNow;
       const endDelta = startDelta + task.duration;
-      if (endDelta < -pastDepth || startDelta > horizon) return;
+      if (endDelta <= 0 || endDelta < -pastDepth || startDelta > horizon) return;
       let visibleStart = Math.max(startDelta, -pastDepth);
       let visibleEnd = Math.min(endDelta, horizon);
       if (visibleEnd - visibleStart < CONFIG.minimum_arc_minutes && startDelta <= horizon && endDelta >= -pastDepth) {
@@ -286,7 +285,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
       return {
         ...event,
         ...ribbon,
-        label: labelFor(event.task, event.startAbs, event.task.duration, duration),
+        label: labelFor(event.task, event.task.duration, duration),
         color: taskColor(event.task),
         current,
         status
@@ -340,11 +339,6 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
     demo.forEach(item => onAddTask({ date: item.date, title: item.title, start: item.start, duration: item.duration, color: item.color, note: item.note }));
   };
 
-  const circleMarks = [0, 180, 360, 540].map((minute, index) => {
-    const point = polar(minute, CONFIG.R0 - CONFIG.W0 - 7);
-    return <circle key={index} cx={point.x} cy={point.y} r="2" className="vortex-hour-dot" />;
-  });
-
   return (
     <section className="vortex-view">
       <div className="vortex-toolbar">
@@ -376,7 +370,6 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask }: Prop
           </defs>
           <circle cx="200" cy="200" r={CONFIG.R_OUT} className="vortex-track" />
           <circle cx="200" cy="200" r={CONFIG.R0} className="vortex-main-track" />
-          {circleMarks}
           {hourLabels.map(item => <g key={item.hour}>
             <text x={item.x} y={item.y} className="vortex-hour-label">{item.label}</text>
             <circle cx={polar(item.hour * 60, CONFIG.R_OUT - 12).x} cy={polar(item.hour * 60, CONFIG.R_OUT - 12).y} r="2.3" className="vortex-hour-dot" />
