@@ -389,6 +389,7 @@ export default function VortexDial({ tasks, selectedDate, now, onAddTask, onMove
         const minute = pointerMinute(event, task.start);
         onMoveTask?.(drag.taskId, minute);
         suppressClickRef.current = true;
+        window.setTimeout(() => { suppressClickRef.current = false; }, 0);
       }
     }
     setDragPreview(null);
