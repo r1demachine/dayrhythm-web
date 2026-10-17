@@ -190,3 +190,48 @@
 @media(max-width:760px){.vortex-toolbar{align-items:flex-start}.vortex-actions{width:100%}.vortex-actions .outline-button{flex:1}.vortex-simulation{padding:11px}.vortex-stage{max-width:440px}.vortex-hour-label{font-size:10px}.vortex-label{font-size:7px}.vortex-tooltip{top:6px;width:min(255px,calc(100% - 12px))}.vortex-form-card{padding:19px 16px}}
 @media(prefers-reduced-motion:reduce){.vortex-ribbon,.vortex-cap{transition:none!important}.vortex-tooltip,.vortex-form-card{animation:none!important}}
 .vortex-event:focus,.vortex-event:focus-visible{outline:none}
+
+
+/* Водоворот: цельная геометрия вместо набора колец */
+.vortex-view{gap:12px}
+.vortex-stage{max-width:520px;min-width:0;overflow:visible}
+.vortex-dial{display:block;width:100%;height:auto;overflow:visible;touch-action:none;user-select:none}
+.vortex-orbit-guide{fill:none;stroke:var(--line);stroke-width:.8;opacity:.44;pointer-events:none}
+.vortex-orbit-guide-outer{opacity:.27}
+.vortex-spiral-guide{fill:none;stroke:var(--muted);stroke-width:1;stroke-linecap:round;stroke-linejoin:round;opacity:.20;pointer-events:none}
+.vortex-tick{fill:none;stroke:var(--muted);stroke-width:.75;stroke-linecap:round;opacity:.46;pointer-events:none}
+.vortex-tick-major{stroke-width:.9;opacity:.60}
+.vortex-hour-label{font-size:10px;font-weight:400;letter-spacing:0;fill:var(--muted);text-anchor:middle;dominant-baseline:middle;font-variant-numeric:tabular-nums;pointer-events:none}
+.vortex-event{cursor:grab;outline:none}
+.vortex-event:active{cursor:grabbing}
+.vortex-event:focus-visible .vortex-hit-area{stroke:var(--accent);stroke-width:10;stroke-opacity:.58}
+.vortex-ribbon-segment{stroke:none;stroke-linejoin:round;transition:fill-opacity .15s linear}
+.vortex-hit-area{cursor:grab;stroke-linecap:round;stroke-linejoin:round}
+.vortex-label{font-family:"DM Sans",sans-serif;font-size:8px;font-weight:600;letter-spacing:.05px;paint-order:normal;stroke:var(--panel);stroke-width:.55px;stroke-linejoin:round;text-anchor:middle;pointer-events:none}
+.vortex-current-head-glow{fill:var(--panel);opacity:.9;filter:blur(2.3px)}
+.vortex-current-head-dot{fill:var(--panel);stroke:var(--text);stroke-width:.65;opacity:.98}
+.vortex-now-line{stroke:var(--text);stroke-width:.9;stroke-linecap:round;opacity:.66;pointer-events:none}
+.vortex-now-dot{fill:var(--text);stroke:var(--panel);stroke-width:1.4;pointer-events:none}
+.vortex-now-pulse{fill:var(--text);opacity:.34;transform-box:fill-box;transform-origin:center;animation:vortex-pulse 2.15s ease-out infinite;pointer-events:none}
+@keyframes vortex-pulse{0%{transform:scale(.55);opacity:.45}70%{transform:scale(1.75);opacity:.04}100%{transform:scale(1.9);opacity:0}}
+.vortex-center{fill:var(--panel);stroke:var(--line);stroke-width:.8}
+.vortex-center-overline{font-size:6.3px;letter-spacing:.9px;font-weight:500;fill:var(--muted);text-anchor:middle}
+.vortex-center-time{font-family:Manrope,sans-serif;font-size:21px;font-weight:600;letter-spacing:-.7px;fill:var(--text);text-anchor:middle;font-variant-numeric:tabular-nums}
+.vortex-center-task{font-size:7.1px;font-weight:400;fill:var(--muted);text-anchor:middle}
+.vortex-tooltip{top:8px;box-shadow:0 8px 26px rgba(0,0,0,.13);background:var(--panel);border-color:var(--line)}
+.vortex-tooltip>strong{font-size:12px;font-weight:600}
+.vortex-empty{border-style:solid;background:var(--panel);border-color:var(--line)}
+.vortex-drag-preview{opacity:.65}
+.vortex-drag-time{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);padding:7px 11px;background:var(--panel);border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;white-space:nowrap;box-shadow:var(--shadow);pointer-events:none}
+.vortex-drag-time strong{color:var(--text);font-variant-numeric:tabular-nums}
+@media(max-width:760px){
+  .vortex-stage{max-width:460px}
+  .vortex-hour-label{font-size:9.5px}
+  .vortex-label{font-size:7.1px}
+  .vortex-tooltip{top:6px;width:min(255px,calc(100% - 12px))}
+}
+@media(prefers-reduced-motion:reduce){
+  .vortex-now-pulse{animation:none!important;opacity:.18}
+  .vortex-ribbon-segment{transition:none!important}
+  .vortex-tooltip,.vortex-form-card{animation:none!important}
+}
