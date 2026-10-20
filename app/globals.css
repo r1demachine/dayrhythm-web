@@ -349,3 +349,34 @@ h1, h2, h3,
   }
 }
 
+/* Прямые дети основных flex/grid-контейнеров не должны расширять их по min-content. */
+:where(
+  .top-actions,
+  .app-navigation,
+  .date-switcher,
+  .day-stats,
+  .panel-heading,
+  .task-heading,
+  .filter-row,
+  .task-main,
+  .feature-toolbar,
+  .feature-actions,
+  .timeline-layout,
+  .inbox-layout,
+  .inbox-task-actions,
+  .setting-row,
+  .insights-grid,
+  .stats-grid,
+  .donut-layout,
+  .balance-insight,
+  .focus-row,
+  .chart-legend,
+  .ai-provider-row,
+  .ai-parsed-task,
+  .feature-task-list,
+  .storage-stats,
+  .insight-cards
+) > * {
+  min-width: 0;
+}
+
