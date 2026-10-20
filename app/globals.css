@@ -245,6 +245,26 @@ h1, h2, h3,
 }
 
 @media (max-width: 420px) {
+  .topbar {
+    height: auto;
+    min-height: 67px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-block: 8px;
+  }
+
+  .top-actions {
+    max-width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .local-label {
+    margin-right: 0;
+  }
+
   .outline-button,
   .primary-button,
   .filter-chip,
